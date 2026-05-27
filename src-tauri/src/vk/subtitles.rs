@@ -7,7 +7,13 @@ const USER_AGENT_VALUE: &str = "Mozilla/5.0";
 const SUBTITLE_REFERER: &str = "https://vk.com/";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_SUBTITLE_BYTES: usize = 2 * 1024 * 1024;
-const ALLOWED_SUBTITLE_HOSTS: &[&str] = &["okcdn.ru", "userapi.com", "vk.com", "vkvideo.ru"];
+const ALLOWED_SUBTITLE_HOSTS: &[&str] = &[
+    "okcdn.ru",
+    "userapi.com",
+    "vk.com",
+    "vkvideo.ru",
+    "vkuser.net",
+];
 
 pub fn select_primary_track(tracks: &[VkSubtitleTrack]) -> Result<&VkSubtitleTrack, VkLoadError> {
     tracks
@@ -183,6 +189,7 @@ mod tests {
             "https://static.vk.com/subtitles/ru.vtt",
             "https://vkvideo.ru/subtitles/ru.vtt",
             "https://cdn.vkvideo.ru/subtitles/ru.vtt",
+            "https://vk95-1.vkuser.net/?ct=13&id=16927431068292",
         ] {
             assert!(validate_subtitle_url(url).is_ok(), "{url}");
         }
@@ -202,6 +209,7 @@ mod tests {
             "https://[fe80::1]/subtitles/ru.vtt",
             "https://example.com/subtitles/ru.vtt",
             "https://okcdn.ru.evil.example/subtitles/ru.vtt",
+            "https://vkuser.net.evil.example/subtitles/ru.vtt",
         ] {
             assert!(
                 matches!(
