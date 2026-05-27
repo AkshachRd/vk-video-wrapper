@@ -5,6 +5,7 @@ const INLINE_TIMESTAMP_RE = /<((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})>/g;
 const TAG_RE = /<\/?[a-z][^>]*>/gi;
 const ENTITY_RE = /&(#\d+|#x[\da-f]+|amp|lt|gt|quot|apos|nbsp|lrm|rlm);/gi;
 const EDGE_PUNCTUATION_RE = /^[\p{P}\p{S}\s]+|[\p{P}\p{S}\s]+$/gu;
+const ROLLING_CARRYOVER_MAX_MS = 100;
 const NAMED_ENTITIES: Record<string, string> = {
   amp: "&",
   apos: "'",
@@ -58,7 +59,7 @@ export function parseWebVtt(raw: string): SubtitleCue[] {
     });
   }
 
-  return cues;
+  return normalizeRollingCues(cues);
 }
 
 export function cleanWord(word: string): string {
@@ -182,6 +183,86 @@ function appendWords(
 
     words.push(word);
   }
+}
+
+function normalizeRollingCues(cues: SubtitleCue[]): SubtitleCue[] {
+  const normalized: SubtitleCue[] = [];
+
+  for (let index = 0; index < cues.length; index++) {
+    const cue = cues[index];
+    const previousCue = cues[index - 1];
+    const nextCue = cues[index + 1];
+
+    if (isRollingCarryoverCue(cue, previousCue, nextCue)) {
+      continue;
+    }
+
+    const repeatedPrefixLength = previousCue
+      ? matchingPrefixLength(cue.words, previousCue.words)
+      : 0;
+    const words = repeatedPrefixLength > 0 ? cue.words.slice(repeatedPrefixLength) : cue.words;
+    const text = textFromWords(words);
+
+    if (!text) {
+      continue;
+    }
+
+    normalized.push(words === cue.words ? cue : { ...cue, text, words });
+  }
+
+  return normalized;
+}
+
+function isRollingCarryoverCue(
+  cue: SubtitleCue,
+  previousCue: SubtitleCue | undefined,
+  nextCue: SubtitleCue | undefined,
+): boolean {
+  if (cue.endMs - cue.startMs > ROLLING_CARRYOVER_MAX_MS) {
+    return false;
+  }
+
+  return Boolean(
+    (previousCue && wordsEndWith(previousCue.words, cue.words)) ||
+      (nextCue && wordsStartWith(nextCue.words, cue.words)),
+  );
+}
+
+function matchingPrefixLength(words: SubtitleWord[], prefix: SubtitleWord[]): number {
+  if (!prefix.length || !wordsStartWith(words, prefix)) {
+    return 0;
+  }
+
+  return prefix.length;
+}
+
+function wordsStartWith(words: SubtitleWord[], prefix: SubtitleWord[]): boolean {
+  if (!prefix.length || prefix.length > words.length) {
+    return false;
+  }
+
+  return prefix.every((word, index) => wordsMatch(words[index], word));
+}
+
+function wordsEndWith(words: SubtitleWord[], suffix: SubtitleWord[]): boolean {
+  if (!suffix.length || suffix.length > words.length) {
+    return false;
+  }
+
+  const offset = words.length - suffix.length;
+  return suffix.every((word, index) => wordsMatch(words[offset + index], word));
+}
+
+function wordsMatch(left: SubtitleWord, right: SubtitleWord): boolean {
+  return wordComparisonText(left) === wordComparisonText(right);
+}
+
+function wordComparisonText(word: SubtitleWord): string {
+  return (word.cleanText || word.text).toLocaleLowerCase();
+}
+
+function textFromWords(words: SubtitleWord[]): string {
+  return words.map((word) => word.text).join(" ").trim();
 }
 
 function decodeEntity(entity: string, value: string): string {
