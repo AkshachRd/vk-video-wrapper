@@ -55,11 +55,56 @@ function loadedVideo(overrides: Partial<LoadedVideo> = {}): LoadedVideo {
   };
 }
 
+const subtitleTracks: LoadedVideo["tracks"] = [
+  {
+    id: "ru_0_ru.vtt",
+    lang: "ru",
+    title: "ru.vtt",
+    manifestName: "Русский",
+    isAuto: false,
+    storageIndex: 0,
+    url: "https://vkvd737.okcdn.ru/ru.vtt",
+  },
+  {
+    id: "de_1_de.vtt",
+    lang: "de",
+    title: "de.vtt",
+    manifestName: "Deutsch",
+    isAuto: false,
+    storageIndex: 1,
+    url: "https://vkvd737.okcdn.ru/de.vtt",
+  },
+  {
+    id: "ru_2_ru_auto.vtt",
+    lang: "ru",
+    title: "ru_auto.vtt",
+    manifestName: "",
+    isAuto: true,
+    storageIndex: 2,
+    url: "https://vkvd737.okcdn.ru/ru-auto.vtt",
+  },
+];
+
 describe("App", () => {
   beforeEach(() => {
     mocks.invoke.mockReset();
     mocks.parseWebVtt.mockReset();
     mocks.parseWebVtt.mockImplementation((raw: string) => {
+      if (raw.includes("Hallo Welt")) {
+        return [
+          {
+            id: "cue-de",
+            startMs: 0,
+            endMs: 1000,
+            text: "Hallo Welt",
+            words: [
+              { id: "cue-de:0", text: "Hallo", cleanText: "Hallo" },
+              { id: "cue-de:1", text: "Welt", cleanText: "Welt" },
+            ],
+          },
+        ];
+      }
+
       if (!raw.includes("Hello from VK")) {
         return [];
       }
@@ -206,5 +251,124 @@ describe("App", () => {
     resolveLoad(loadedVideo());
 
     expect(await screen.findByText("Loaded subtitles")).toBeInTheDocument();
+  });
+
+  it("shows a subtitle track dropdown with readable labels after loading", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockResolvedValue(
+      loadedVideo({
+        tracks: subtitleTracks,
+        selectedTrackId: "ru_0_ru.vtt",
+      }),
+    );
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+
+    const select = await screen.findByRole("combobox", { name: "Subtitles" });
+
+    expect(select).toHaveValue("ru_0_ru.vtt");
+    expect(screen.getByRole("option", { name: "Русский" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Deutsch" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "ru_auto.vtt auto" })).toBeInTheDocument();
+  });
+
+  it("loads a selected subtitle track and updates rendered words", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "ru_0_ru.vtt",
+          }),
+        );
+      }
+
+      return Promise.resolve({
+        selectedTrackId: "de_1_de.vtt",
+        subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+      });
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+
+    expect(mocks.invoke).toHaveBeenCalledWith("load_subtitle_track", {
+      videoId: { ownerId: -1, videoId: 2 },
+      trackId: "de_1_de.vtt",
+    });
+
+    await user.click(screen.getByRole("button", { name: "advance video" }));
+
+    expect(await screen.findByRole("button", { name: "Hallo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Welt" })).toBeInTheDocument();
+  });
+
+  it("keeps previous subtitles visible when selected track loading fails", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "ru_0_ru.vtt",
+          }),
+        );
+      }
+
+      return Promise.reject(
+        JSON.stringify({
+          kind: "subtitles-not-found",
+          message: "subtitles-not-found",
+        }),
+      );
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+
+    expect(await screen.findByText("This subtitle track is no longer available.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
+  });
+
+  it("keeps previous subtitles visible when selected track cannot be parsed", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "ru_0_ru.vtt",
+          }),
+        );
+      }
+
+      return Promise.resolve({
+        selectedTrackId: "de_1_de.vtt",
+        subtitleText: "WEBVTT\n\nNOTE missing cues",
+      });
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+
+    expect(await screen.findByText("Subtitles could not be parsed for this track.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
   });
 });

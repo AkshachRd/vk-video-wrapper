@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type FormEvent } from "react";
+import { useCallback, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { Alert } from "@/components/ui/alert";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
 import { VideoPlayer } from "@/components/video-player";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
-import type { LoadedVideo, SubtitleLane } from "@/lib/subtitles/types";
+import type { LoadedSubtitleTrack, LoadedVideo, SubtitleLane, SubtitleTrack } from "@/lib/subtitles/types";
 
 const LOAD_ERROR_MESSAGES: Record<string, string> = {
   "invalid-link": "This does not look like a public VK Video link.",
@@ -19,6 +19,7 @@ const LOAD_ERROR_MESSAGES: Record<string, string> = {
 
 const UNKNOWN_LOAD_ERROR = "The video could not be loaded.";
 const SUBTITLE_PARSE_ERROR = "Subtitles could not be parsed for this video.";
+const TRACK_PARSE_ERROR = "Subtitles could not be parsed for this track.";
 
 export default function App() {
   const [url, setUrl] = useState("");
@@ -27,6 +28,8 @@ export default function App() {
   const [video, setVideo] = useState<LoadedVideo | undefined>();
   const [lane, setLane] = useState<SubtitleLane | undefined>();
   const [timeMs, setTimeMs] = useState(0);
+  const [selectedTrackId, setSelectedTrackId] = useState("");
+  const [isTrackLoading, setIsTrackLoading] = useState(false);
   const requestIdRef = useRef(0);
 
   const handleSubmit = useCallback(
@@ -46,6 +49,7 @@ export default function App() {
       setVideo(undefined);
       setLane(undefined);
       setTimeMs(0);
+      setSelectedTrackId("");
 
       let loadedVideo: LoadedVideo;
 
@@ -83,6 +87,7 @@ export default function App() {
       }
 
       setVideo(loadedVideo);
+      setSelectedTrackId(loadedVideo.selectedTrackId);
       setLane({
         role: "primary",
         source: "vk-track",
@@ -91,6 +96,57 @@ export default function App() {
       });
     },
     [isLoading, url],
+  );
+
+  const handleTrackChange = useCallback(
+    async (event: ChangeEvent<HTMLSelectElement>) => {
+      const nextTrackId = event.target.value;
+      if (!video || !lane || isTrackLoading || nextTrackId === selectedTrackId) {
+        return;
+      }
+
+      setIsTrackLoading(true);
+      setError(undefined);
+
+      let loadedTrack: LoadedSubtitleTrack;
+
+      try {
+        loadedTrack = await invoke<LoadedSubtitleTrack>("load_subtitle_track", {
+          videoId: video.videoId,
+          trackId: nextTrackId,
+        });
+      } catch (trackLoadError) {
+        setError(mapTrackLoadError(trackLoadError));
+        setIsTrackLoading(false);
+        return;
+      }
+
+      let cues: SubtitleLane["cues"];
+
+      try {
+        cues = parseWebVtt(loadedTrack.subtitleText);
+      } catch {
+        setError(TRACK_PARSE_ERROR);
+        setIsTrackLoading(false);
+        return;
+      }
+
+      if (cues.length === 0) {
+        setError(TRACK_PARSE_ERROR);
+        setIsTrackLoading(false);
+        return;
+      }
+
+      setSelectedTrackId(loadedTrack.selectedTrackId);
+      setLane({
+        role: "primary",
+        source: "vk-track",
+        trackId: loadedTrack.selectedTrackId,
+        cues,
+      });
+      setIsTrackLoading(false);
+    },
+    [isTrackLoading, lane, selectedTrackId, video],
   );
 
   return (
@@ -113,7 +169,27 @@ export default function App() {
 
         {video && lane ? (
           <div className="space-y-3">
-            <div className="text-sm text-slate-400">Loaded subtitles</div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm text-slate-400">Loaded subtitles</div>
+              {video.tracks.length > 0 ? (
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <span>Subtitles</span>
+                  <select
+                    aria-label="Subtitles"
+                    value={selectedTrackId}
+                    disabled={isTrackLoading}
+                    onChange={handleTrackChange}
+                    className="h-9 min-w-40 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
+                  >
+                    {video.tracks.map((track) => (
+                      <option key={track.id} value={track.id}>
+                        {formatTrackLabel(track)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
             <div className="relative aspect-video overflow-hidden rounded-md border border-slate-800 bg-black">
               <VideoPlayer embedUrl={video.embedUrl} onTimeUpdate={setTimeMs} />
               <SubtitleOverlay lane={lane} timeMs={timeMs} />
@@ -125,10 +201,30 @@ export default function App() {
   );
 }
 
+function formatTrackLabel(track: SubtitleTrack): string {
+  const label = track.manifestName || track.title || track.lang || track.id;
+  return track.isAuto ? `${label} auto` : label;
+}
+
 function mapLoadError(error: unknown): string {
   const code = typeof error === "string" ? extractErrorCode(error) : error instanceof Error ? error.message : "";
 
   return LOAD_ERROR_MESSAGES[code] ?? UNKNOWN_LOAD_ERROR;
+}
+
+function mapTrackLoadError(error: unknown): string {
+  const code = typeof error === "string" ? extractErrorCode(error) : error instanceof Error ? error.message : "";
+
+  switch (code) {
+    case "subtitles-not-found":
+      return "This subtitle track is no longer available.";
+    case "subtitle-fetch-failed":
+      return "The subtitle file could not be downloaded.";
+    case "subtitle-parse-failed":
+      return TRACK_PARSE_ERROR;
+    default:
+      return "The subtitle track could not be loaded.";
+  }
 }
 
 function extractErrorCode(error: string): string {

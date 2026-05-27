@@ -47,3 +47,8 @@ export interface LoadedVideo {
   selectedTrackId: string;
   subtitleText: string;
 }
+
+export interface LoadedSubtitleTrack {
+  selectedTrackId: string;
+  subtitleText: string;
+}
