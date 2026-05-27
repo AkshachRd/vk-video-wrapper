@@ -9,6 +9,7 @@ import App from "./App";
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   parseWebVtt: vi.fn(),
+  pausePlayer: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -23,14 +24,22 @@ vi.mock("@/components/video-player", () => ({
   VideoPlayer: ({
     embedUrl,
     onTimeUpdate,
+    onControlsReady,
   }: {
     embedUrl: string;
     onTimeUpdate: (timeMs: number) => void;
+    onControlsReady?: (controls: { pause: () => void } | undefined) => void;
   }) => (
     <div>
       <div>Player: {embedUrl}</div>
+      <button type="button" onClick={() => onControlsReady?.({ pause: mocks.pausePlayer })}>
+        ready player
+      </button>
       <button type="button" onClick={() => onTimeUpdate(500)}>
         advance video
+      </button>
+      <button type="button" onClick={() => onTimeUpdate(1000)}>
+        advance to next subtitle
       </button>
     </div>
   ),
@@ -89,6 +98,7 @@ describe("App", () => {
   beforeEach(() => {
     mocks.invoke.mockReset();
     mocks.parseWebVtt.mockReset();
+    mocks.pausePlayer.mockReset();
     mocks.parseWebVtt.mockImplementation((raw: string) => {
       if (raw.includes("Hallo Welt")) {
         return [
@@ -308,6 +318,26 @@ describe("App", () => {
 
     expect(await screen.findByRole("button", { name: "Hallo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Welt" })).toBeInTheDocument();
+  });
+
+  it("pauses before moving to the next subtitle after a word is clicked", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockResolvedValue(loadedVideo());
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "ready player" }));
+    await user.click(screen.getByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Hello" }));
+
+    expect(mocks.pausePlayer).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "advance to next subtitle" }));
+
+    expect(mocks.pausePlayer).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
   });
 
   it("keeps previous subtitles visible when selected track loading fails", async () => {

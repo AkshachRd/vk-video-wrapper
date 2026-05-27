@@ -74,6 +74,16 @@ describe("SubtitleOverlay", () => {
     expect(screen.getByText("утро")).toBeInTheDocument();
   });
 
+  it("notifies when a word is clicked with the active cue", async () => {
+    const user = userEvent.setup();
+    const onWordInspect = vi.fn();
+    render(<SubtitleOverlay lane={lane} timeMs={1200} onWordInspect={onWordInspect} />);
+
+    await user.click(screen.getByRole("button", { name: "Доброе" }));
+
+    expect(onWordInspect).toHaveBeenCalledWith(lane.cues[0]);
+  });
+
   it("renders nothing when no cue is active", () => {
     render(<SubtitleOverlay lane={lane} timeMs={800} />);
 
@@ -106,14 +116,17 @@ describe("VideoPlayer", () => {
 
   it("loads the VK script, initializes the bridge, and cleans up on unmount", async () => {
     const destroy = vi.fn();
+    const pause = vi.fn();
     const onTimeUpdate = vi.fn();
+    const onControlsReady = vi.fn();
     mocks.loadVkPlayerScript.mockResolvedValue(undefined);
-    mocks.createVkPlayerBridge.mockReturnValue({ destroy });
+    mocks.createVkPlayerBridge.mockReturnValue({ destroy, pause });
 
     const { unmount } = render(
       <VideoPlayer
         embedUrl="https://vk.com/video_ext.php?oid=1&id=2"
         onTimeUpdate={onTimeUpdate}
+        onControlsReady={onControlsReady}
       />,
     );
     const iframe = screen.getByTitle<HTMLIFrameElement>("VK Video player");
@@ -124,9 +137,11 @@ describe("VideoPlayer", () => {
         onTimeUpdate,
       });
     });
+    expect(onControlsReady).toHaveBeenCalledWith({ pause });
 
     unmount();
 
+    expect(onControlsReady).toHaveBeenLastCalledWith(undefined);
     expect(destroy).toHaveBeenCalled();
   });
 });

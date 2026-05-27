@@ -13,6 +13,7 @@ describe("createVkPlayerBridge", () => {
         handlers.set(event, handler);
       }),
       off: vi.fn(),
+      pause: vi.fn(),
       destroy: vi.fn(),
     };
     const iframe = document.createElement("iframe");
@@ -27,6 +28,10 @@ describe("createVkPlayerBridge", () => {
     handlers.get("timeupdate")?.({ time: 12.3456 });
 
     expect(onTimeUpdate).toHaveBeenCalledWith(12346);
+
+    bridge.pause();
+
+    expect(fakePlayer.pause).toHaveBeenCalled();
 
     bridge.destroy();
 

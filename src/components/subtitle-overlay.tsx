@@ -1,13 +1,14 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { selectActiveCue } from "@/lib/subtitles/select-active-cue";
-import type { SubtitleLane } from "@/lib/subtitles/types";
+import type { SubtitleCue, SubtitleLane } from "@/lib/subtitles/types";
 
 type SubtitleOverlayProps = {
   lane: SubtitleLane;
   timeMs: number;
+  onWordInspect?: (cue: SubtitleCue) => void;
 };
 
-export function SubtitleOverlay({ lane, timeMs }: SubtitleOverlayProps) {
+export function SubtitleOverlay({ lane, timeMs, onWordInspect }: SubtitleOverlayProps) {
   const cue = selectActiveCue(lane.cues, timeMs);
   if (!cue) return null;
 
@@ -20,6 +21,7 @@ export function SubtitleOverlay({ lane, timeMs }: SubtitleOverlayProps) {
               <button
                 type="button"
                 className="mx-1 rounded-sm px-1 text-white underline-offset-4 transition-colors hover:bg-white/15 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                onClick={() => onWordInspect?.(cue)}
               >
                 {word.text}
               </button>

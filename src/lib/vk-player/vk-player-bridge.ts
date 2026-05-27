@@ -5,6 +5,7 @@ type VkPlayerTimeUpdateHandler = (payload: VkPlayerTimeUpdatePayload) => void;
 type VkPlayer = {
   on(event: VkPlayerEvent, handler: VkPlayerTimeUpdateHandler): void;
   off?(event: VkPlayerEvent, handler: VkPlayerTimeUpdateHandler): void;
+  pause(): void;
   destroy(): void;
 };
 
@@ -20,6 +21,11 @@ type CreateVkPlayerBridgeOptions = {
   playerFactory?: (iframe: HTMLIFrameElement) => VkPlayer;
 };
 
+export type VkPlayerControls = {
+  pause(): void;
+  destroy(): void;
+};
+
 const VK_PLAYER_SCRIPT_ID = "vk-video-player-api";
 const VK_PLAYER_SCRIPT_URL = "https://vk.com/js/api/videoplayer.js";
 
@@ -29,7 +35,7 @@ export function createVkPlayerBridge({
   iframe,
   onTimeUpdate,
   playerFactory,
-}: CreateVkPlayerBridgeOptions) {
+}: CreateVkPlayerBridgeOptions): VkPlayerControls {
   const player = (playerFactory ?? createDefaultPlayer)(iframe);
   const handleTimeUpdate: VkPlayerTimeUpdateHandler = (payload) => {
     onTimeUpdate(Math.round((payload.time ?? 0) * 1000));
@@ -38,6 +44,9 @@ export function createVkPlayerBridge({
   player.on("timeupdate", handleTimeUpdate);
 
   return {
+    pause() {
+      player.pause();
+    },
     destroy() {
       player.off?.("timeupdate", handleTimeUpdate);
       player.destroy();

@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
 import { VideoPlayer } from "@/components/video-player";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
-import type { LoadedSubtitleTrack, LoadedVideo, SubtitleLane, SubtitleTrack } from "@/lib/subtitles/types";
+import type { LoadedSubtitleTrack, LoadedVideo, SubtitleCue, SubtitleLane, SubtitleTrack } from "@/lib/subtitles/types";
+import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
 
 const LOAD_ERROR_MESSAGES: Record<string, string> = {
   "invalid-link": "This does not look like a public VK Video link.",
@@ -21,6 +22,12 @@ const UNKNOWN_LOAD_ERROR = "The video could not be loaded.";
 const SUBTITLE_PARSE_ERROR = "Subtitles could not be parsed for this video.";
 const TRACK_PARSE_ERROR = "Subtitles could not be parsed for this track.";
 
+type PendingSubtitlePause = {
+  cueId: string;
+  stopAtMs: number;
+  holdAtMs: number;
+};
+
 export default function App() {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +38,39 @@ export default function App() {
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [isTrackLoading, setIsTrackLoading] = useState(false);
   const requestIdRef = useRef(0);
+  const playerControlsRef = useRef<Pick<VkPlayerControls, "pause"> | undefined>(undefined);
+  const pendingSubtitlePauseRef = useRef<PendingSubtitlePause | undefined>(undefined);
+
+  const handlePlayerControlsReady = useCallback(
+    (controls: Pick<VkPlayerControls, "pause"> | undefined) => {
+      playerControlsRef.current = controls;
+    },
+    [],
+  );
+
+  const handleSubtitleWordInspect = useCallback((cue: SubtitleCue) => {
+    pendingSubtitlePauseRef.current = {
+      cueId: cue.id,
+      stopAtMs: cue.endMs,
+      holdAtMs: Math.max(cue.startMs, cue.endMs - 1),
+    };
+  }, []);
+
+  const handleTimeUpdate = useCallback((nextTimeMs: number) => {
+    const pendingPause = pendingSubtitlePauseRef.current;
+
+    if (pendingPause && nextTimeMs >= pendingPause.stopAtMs) {
+      pendingSubtitlePauseRef.current = undefined;
+
+      if (playerControlsRef.current) {
+        playerControlsRef.current.pause();
+        setTimeMs(pendingPause.holdAtMs);
+        return;
+      }
+    }
+
+    setTimeMs(nextTimeMs);
+  }, []);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -50,6 +90,7 @@ export default function App() {
       setLane(undefined);
       setTimeMs(0);
       setSelectedTrackId("");
+      pendingSubtitlePauseRef.current = undefined;
 
       let loadedVideo: LoadedVideo;
 
@@ -107,6 +148,7 @@ export default function App() {
 
       setIsTrackLoading(true);
       setError(undefined);
+      pendingSubtitlePauseRef.current = undefined;
 
       let loadedTrack: LoadedSubtitleTrack;
 
@@ -191,8 +233,16 @@ export default function App() {
               ) : null}
             </div>
             <div className="relative aspect-video overflow-hidden rounded-md border border-slate-800 bg-black">
-              <VideoPlayer embedUrl={video.embedUrl} onTimeUpdate={setTimeMs} />
-              <SubtitleOverlay lane={lane} timeMs={timeMs} />
+              <VideoPlayer
+                embedUrl={video.embedUrl}
+                onTimeUpdate={handleTimeUpdate}
+                onControlsReady={handlePlayerControlsReady}
+              />
+              <SubtitleOverlay
+                lane={lane}
+                timeMs={timeMs}
+                onWordInspect={handleSubtitleWordInspect}
+              />
             </div>
           </div>
         ) : null}

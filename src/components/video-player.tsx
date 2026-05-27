@@ -1,18 +1,20 @@
 import { useEffect, useRef } from "react";
 
 import { createVkPlayerBridge, loadVkPlayerScript } from "@/lib/vk-player/vk-player-bridge";
+import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
 
 type VideoPlayerProps = {
   embedUrl: string;
   onTimeUpdate: (timeMs: number) => void;
+  onControlsReady?: (controls: Pick<VkPlayerControls, "pause"> | undefined) => void;
 };
 
-export function VideoPlayer({ embedUrl, onTimeUpdate }: VideoPlayerProps) {
+export function VideoPlayer({ embedUrl, onTimeUpdate, onControlsReady }: VideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    let bridge: { destroy(): void } | undefined;
+    let bridge: VkPlayerControls | undefined;
 
     async function initializeBridge() {
       try {
@@ -26,6 +28,7 @@ export function VideoPlayer({ embedUrl, onTimeUpdate }: VideoPlayerProps) {
           iframe: iframeRef.current,
           onTimeUpdate,
         });
+        onControlsReady?.({ pause: bridge.pause });
       } catch {
         return;
       }
@@ -35,9 +38,10 @@ export function VideoPlayer({ embedUrl, onTimeUpdate }: VideoPlayerProps) {
 
     return () => {
       cancelled = true;
+      onControlsReady?.(undefined);
       bridge?.destroy();
     };
-  }, [embedUrl, onTimeUpdate]);
+  }, [embedUrl, onControlsReady, onTimeUpdate]);
 
   return (
     <iframe
