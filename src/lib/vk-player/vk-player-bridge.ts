@@ -57,6 +57,7 @@ export function loadVkPlayerScript(): Promise<void> {
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => {
+      script.remove();
       scriptLoadPromise = undefined;
       reject(new Error("Failed to load VK player script"));
     };

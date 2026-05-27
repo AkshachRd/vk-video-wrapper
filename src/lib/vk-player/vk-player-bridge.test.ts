@@ -66,4 +66,24 @@ describe("loadVkPlayerScript", () => {
 
     await expect(loading).rejects.toThrow("Failed to load VK player script");
   });
+
+  it("retries with a new script element after a load failure", async () => {
+    const failedLoad = loadVkPlayerScript();
+    const failedScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://vk.com/js/api/videoplayer.js"]',
+    );
+
+    failedScript?.dispatchEvent(new Event("error"));
+    await expect(failedLoad).rejects.toThrow("Failed to load VK player script");
+
+    const retryLoad = loadVkPlayerScript();
+    const retryScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://vk.com/js/api/videoplayer.js"]',
+    );
+
+    expect(retryScript).not.toBe(failedScript);
+
+    retryScript?.dispatchEvent(new Event("load"));
+    await expect(retryLoad).resolves.toBeUndefined();
+  });
 });

@@ -15,16 +15,20 @@ export function VideoPlayer({ embedUrl, onTimeUpdate }: VideoPlayerProps) {
     let bridge: { destroy(): void } | undefined;
 
     async function initializeBridge() {
-      const iframe = iframeRef.current;
-      if (!iframe) return;
+      try {
+        const iframe = iframeRef.current;
+        if (!iframe) return;
 
-      await loadVkPlayerScript();
-      if (cancelled || !iframeRef.current) return;
+        await loadVkPlayerScript();
+        if (cancelled || !iframeRef.current) return;
 
-      bridge = createVkPlayerBridge({
-        iframe: iframeRef.current,
-        onTimeUpdate,
-      });
+        bridge = createVkPlayerBridge({
+          iframe: iframeRef.current,
+          onTimeUpdate,
+        });
+      } catch {
+        return;
+      }
     }
 
     void initializeBridge();
