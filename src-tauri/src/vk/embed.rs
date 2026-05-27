@@ -1,11 +1,14 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use url::Url;
 
 use super::errors::VkLoadError;
 use super::link_parser::VkVideoId;
 
 const USER_AGENT_VALUE: &str = "Mozilla/5.0";
 const EMBED_REFERER: &str = "https://vkvideo.ru/";
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,10 +45,21 @@ struct RawSubtitleTrack {
 }
 
 pub fn build_embed_url(id: &VkVideoId) -> String {
-    format!(
-        "https://vk.com/video_ext.php?oid={}&id={}&hd=2&js_api=1",
-        id.owner_id, id.video_id
-    )
+    let mut url = Url::parse("https://vk.com/video_ext.php").expect("valid VK embed base URL");
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("oid", &id.owner_id.to_string());
+        query.append_pair("id", &id.video_id.to_string());
+        query.append_pair("hd", "2");
+        query.append_pair("js_api", "1");
+        if let Some(list) = &id.list {
+            query.append_pair("list", list);
+        }
+        if let Some(access_key) = &id.access_key {
+            query.append_pair("access_key", access_key);
+        }
+    }
+    url.to_string()
 }
 
 pub fn extract_embed_metadata(html: &str) -> Result<VkEmbedMetadata, VkLoadError> {
@@ -58,7 +72,7 @@ pub fn extract_embed_metadata(html: &str) -> Result<VkEmbedMetadata, VkLoadError
 
 pub async fn fetch_embed_metadata(id: &VkVideoId) -> Result<VkEmbedMetadata, VkLoadError> {
     let embed_url = build_embed_url(id);
-    let client = reqwest::Client::new();
+    let client = build_embed_client()?;
     let request = build_embed_request(&client, &embed_url)?;
     let response = client
         .execute(request)
@@ -78,6 +92,13 @@ pub async fn fetch_embed_metadata(id: &VkVideoId) -> Result<VkEmbedMetadata, VkL
     Ok(metadata)
 }
 
+fn build_embed_client() -> Result<reqwest::Client, VkLoadError> {
+    reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|_| VkLoadError::VideoUnavailable)
+}
+
 fn build_embed_request(
     client: &reqwest::Client,
     embed_url: &str,
@@ -91,12 +112,7 @@ fn build_embed_request(
 }
 
 fn extract_tracks(html: &str) -> Result<Vec<VkSubtitleTrack>, VkLoadError> {
-    let re = Regex::new(r#""?subtitles"?\s*:\s*(\[[^\]]*\])"#).expect("valid subtitle regex");
-    let raw_json = re
-        .captures(html)
-        .and_then(|captures| captures.get(1))
-        .map(|m| m.as_str().replace("\\/", "/"))
-        .ok_or(VkLoadError::SubtitlesNotFound)?;
+    let raw_json = extract_subtitle_array(html)?.replace("\\/", "/");
 
     let raw_tracks: Vec<RawSubtitleTrack> =
         serde_json::from_str(&raw_json).map_err(|_| VkLoadError::SubtitlesNotFound)?;
@@ -133,6 +149,60 @@ fn extract_tracks(html: &str) -> Result<Vec<VkSubtitleTrack>, VkLoadError> {
     }
 }
 
+fn extract_subtitle_array(html: &str) -> Result<&str, VkLoadError> {
+    let key_re =
+        Regex::new(r#""subtitles"\s*:|\bsubtitles\s*:"#).expect("valid subtitles key regex");
+
+    for key_match in key_re.find_iter(html) {
+        let after_key = &html[key_match.end()..];
+        let Some(start_offset) = after_key
+            .char_indices()
+            .find_map(|(index, ch)| (!ch.is_whitespace()).then_some(index))
+        else {
+            continue;
+        };
+        let start = key_match.end() + start_offset;
+        if html[start..].starts_with('[') {
+            return extract_balanced_json_array(html, start);
+        }
+    }
+
+    Err(VkLoadError::SubtitlesNotFound)
+}
+
+fn extract_balanced_json_array(html: &str, start: usize) -> Result<&str, VkLoadError> {
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (offset, ch) in html[start..].char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        match ch {
+            '"' => in_string = true,
+            '[' => depth += 1,
+            ']' => {
+                depth = depth.checked_sub(1).ok_or(VkLoadError::SubtitlesNotFound)?;
+                if depth == 0 {
+                    return Ok(&html[start..start + offset + ch.len_utf8()]);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Err(VkLoadError::SubtitlesNotFound)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,6 +226,21 @@ mod tests {
     }
 
     #[test]
+    fn builds_embed_url_with_list_and_access_key() {
+        let id = VkVideoId {
+            owner_id: -51890028,
+            video_id: 456242200,
+            list: Some("ln-Cg6C0nEVR81075JXFU".to_string()),
+            access_key: Some("abc_123".to_string()),
+        };
+
+        assert_eq!(
+            build_embed_url(&id),
+            "https://vk.com/video_ext.php?oid=-51890028&id=456242200&hd=2&js_api=1&list=ln-Cg6C0nEVR81075JXFU&access_key=abc_123"
+        );
+    }
+
+    #[test]
     fn extracts_subtitle_tracks_from_embed_html() {
         let html = include_str!("../../tests/fixtures/embed_with_subtitles.html");
         let metadata = extract_embed_metadata(html).unwrap();
@@ -168,6 +253,19 @@ mod tests {
         assert_eq!(
             metadata.tracks[0].url,
             "https://vkvd737.okcdn.ru/?subId=1&id=1"
+        );
+    }
+
+    #[test]
+    fn extracts_subtitle_tracks_when_strings_contain_brackets() {
+        let html = include_str!("../../tests/fixtures/embed_with_bracketed_subtitles.html");
+        let metadata = extract_embed_metadata(html).unwrap();
+
+        assert_eq!(metadata.tracks.len(), 1);
+        assert_eq!(metadata.tracks[0].title, "ru_[auto].vtt");
+        assert_eq!(
+            metadata.tracks[0].url,
+            "https://vkvd737.okcdn.ru/subtitles/ru]auto.vtt"
         );
     }
 
@@ -190,5 +288,10 @@ mod tests {
 
         assert_eq!(request.headers()[USER_AGENT], "Mozilla/5.0");
         assert_eq!(request.headers()[REFERER], "https://vkvideo.ru/");
+    }
+
+    #[test]
+    fn builds_embed_client() {
+        assert!(build_embed_client().is_ok());
     }
 }

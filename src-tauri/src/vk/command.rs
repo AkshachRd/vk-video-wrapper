@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use super::embed::{fetch_embed_metadata, VkSubtitleTrack};
+use super::embed::{fetch_embed_metadata, VkEmbedMetadata, VkSubtitleTrack};
 use super::link_parser::{parse_vk_video_url, VkVideoId};
 use super::subtitles::{fetch_subtitle_text, select_primary_track};
 
@@ -27,13 +27,27 @@ pub async fn load_video_from_url(url: String) -> Result<LoadedVideo, String> {
         .await
         .map_err(String::from)?;
 
-    Ok(LoadedVideo {
+    Ok(assemble_loaded_video(
+        video_id,
+        metadata,
+        selected_track,
+        subtitle_text,
+    ))
+}
+
+fn assemble_loaded_video(
+    video_id: VkVideoId,
+    metadata: VkEmbedMetadata,
+    selected_track: VkSubtitleTrack,
+    subtitle_text: String,
+) -> LoadedVideo {
+    LoadedVideo {
         video_id,
         embed_url: metadata.embed_url,
         tracks: metadata.tracks,
         selected_track_id: selected_track.id,
         subtitle_text,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -89,5 +103,31 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error, r#"{"kind":"invalid-link","message":"invalid-link"}"#);
+    }
+
+    #[test]
+    fn assembles_loaded_video_from_supplied_metadata_and_subtitle_text() {
+        let video_id = VkVideoId {
+            owner_id: -1,
+            video_id: 2,
+            list: None,
+            access_key: None,
+        };
+        let selected_track = track();
+        let metadata = VkEmbedMetadata {
+            embed_url: "https://vk.com/video_ext.php?oid=-1&id=2&hd=2&js_api=1".to_string(),
+            tracks: vec![selected_track.clone()],
+        };
+
+        let video = assemble_loaded_video(
+            video_id,
+            metadata,
+            selected_track,
+            "WEBVTT\n\nhello".to_string(),
+        );
+
+        assert_eq!(video.selected_track_id, "ru_0_ru_auto.vtt");
+        assert_eq!(video.subtitle_text, "WEBVTT\n\nhello");
+        assert_eq!(video.tracks.len(), 1);
     }
 }
