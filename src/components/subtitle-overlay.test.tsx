@@ -71,17 +71,72 @@ describe("SubtitleOverlay", () => {
 
     await user.click(screen.getByRole("button", { name: "утро!" }));
 
+    expect(screen.getByRole("dialog", { name: "Word details: утро" })).toBeInTheDocument();
     expect(screen.getByText("утро")).toBeInTheDocument();
   });
 
-  it("notifies when a word is clicked with the active cue", async () => {
+  it("notifies when a word is clicked with the active cue and clicked word", async () => {
     const user = userEvent.setup();
     const onWordInspect = vi.fn();
     render(<SubtitleOverlay lane={lane} timeMs={1200} onWordInspect={onWordInspect} />);
 
     await user.click(screen.getByRole("button", { name: "Доброе" }));
 
-    expect(onWordInspect).toHaveBeenCalledWith(lane.cues[0]);
+    expect(onWordInspect).toHaveBeenCalledWith(lane.cues[0], lane.cues[0].words[0]);
+  });
+
+  it("does not inspect a word again when clicking its already-open trigger to close", async () => {
+    const user = userEvent.setup();
+    const onWordInspect = vi.fn();
+    const onWordInspectEnd = vi.fn();
+    render(
+      <SubtitleOverlay
+        lane={lane}
+        timeMs={1200}
+        onWordInspect={onWordInspect}
+        onWordInspectEnd={onWordInspectEnd}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Доброе" });
+    await user.click(button);
+    await user.click(button);
+
+    expect(onWordInspect).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(onWordInspectEnd).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("renders lookup state inside an open word popover", async () => {
+    const user = userEvent.setup();
+    render(
+      <SubtitleOverlay
+        lane={lane}
+        timeMs={1200}
+        wordLookup={{ status: "loading", query: "утро" }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "утро!" }));
+
+    expect(screen.getByText("Ищу в словаре...")).toBeInTheDocument();
+  });
+
+  it("does not show lookup state for a different word", async () => {
+    const user = userEvent.setup();
+    render(
+      <SubtitleOverlay
+        lane={lane}
+        timeMs={1200}
+        wordLookup={{ status: "loading", query: "Доброе" }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "утро!" }));
+
+    expect(screen.queryByText("Ищу в словаре...")).not.toBeInTheDocument();
+    expect(screen.getByText("утро")).toBeInTheDocument();
   });
 
   it("notifies when a word popover closes", async () => {
