@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use super::embed::{fetch_embed_metadata, VkEmbedMetadata, VkSubtitleTrack};
+use super::errors::VkLoadError;
 use super::link_parser::{parse_vk_video_url, VkVideoId};
 use super::subtitles::{fetch_subtitle_text, select_primary_track};
 
@@ -10,6 +11,13 @@ pub struct LoadedVideo {
     pub video_id: VkVideoId,
     pub embed_url: String,
     pub tracks: Vec<VkSubtitleTrack>,
+    pub selected_track_id: String,
+    pub subtitle_text: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadedSubtitleTrack {
     pub selected_track_id: String,
     pub subtitle_text: String,
 }
@@ -35,6 +43,25 @@ pub async fn load_video_from_url(url: String) -> Result<LoadedVideo, String> {
     ))
 }
 
+#[tauri::command]
+pub async fn load_subtitle_track(
+    video_id: VkVideoId,
+    track_id: String,
+) -> Result<LoadedSubtitleTrack, String> {
+    let metadata = fetch_embed_metadata(&video_id)
+        .await
+        .map_err(String::from)?;
+    let selected_track = select_track_by_id(&metadata.tracks, &track_id).map_err(String::from)?;
+    let subtitle_text = fetch_subtitle_text(&selected_track)
+        .await
+        .map_err(String::from)?;
+
+    Ok(assemble_loaded_subtitle_track(
+        selected_track,
+        subtitle_text,
+    ))
+}
+
 fn assemble_loaded_video(
     video_id: VkVideoId,
     metadata: VkEmbedMetadata,
@@ -45,6 +72,27 @@ fn assemble_loaded_video(
         video_id,
         embed_url: metadata.embed_url,
         tracks: metadata.tracks,
+        selected_track_id: selected_track.id,
+        subtitle_text,
+    }
+}
+
+fn select_track_by_id(
+    tracks: &[VkSubtitleTrack],
+    track_id: &str,
+) -> Result<VkSubtitleTrack, VkLoadError> {
+    tracks
+        .iter()
+        .find(|track| track.id == track_id)
+        .cloned()
+        .ok_or(VkLoadError::SubtitlesNotFound)
+}
+
+fn assemble_loaded_subtitle_track(
+    selected_track: VkSubtitleTrack,
+    subtitle_text: String,
+) -> LoadedSubtitleTrack {
+    LoadedSubtitleTrack {
         selected_track_id: selected_track.id,
         subtitle_text,
     }
@@ -64,6 +112,18 @@ mod tests {
             url: "https://example.com/ru.vtt".to_string(),
             manifest_name: "Русский".to_string(),
             is_auto: true,
+            storage_index: 0,
+        }
+    }
+
+    fn track_with_id(id: &str) -> VkSubtitleTrack {
+        VkSubtitleTrack {
+            id: id.to_string(),
+            lang: id.split('_').next().unwrap_or("ru").to_string(),
+            title: format!("{id}.vtt"),
+            url: "https://vkvd737.okcdn.ru/subtitles/test.vtt".to_string(),
+            manifest_name: id.to_string(),
+            is_auto: false,
             storage_index: 0,
         }
     }
@@ -129,5 +189,45 @@ mod tests {
         assert_eq!(video.selected_track_id, "ru_0_ru_auto.vtt");
         assert_eq!(video.subtitle_text, "WEBVTT\n\nhello");
         assert_eq!(video.tracks.len(), 1);
+    }
+
+    #[test]
+    fn loaded_subtitle_track_serializes_as_camel_case() {
+        let value = serde_json::to_value(LoadedSubtitleTrack {
+            selected_track_id: "de_1_de.vtt".to_string(),
+            subtitle_text: "WEBVTT\n\nHallo".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(value["selectedTrackId"], "de_1_de.vtt");
+        assert_eq!(value["subtitleText"], "WEBVTT\n\nHallo");
+    }
+
+    #[test]
+    fn selects_requested_track_by_id() {
+        let ru = track_with_id("ru_0_ru.vtt");
+        let de = track_with_id("de_1_de.vtt");
+        let selected = select_track_by_id(&[ru, de.clone()], "de_1_de.vtt").unwrap();
+
+        assert_eq!(selected, de);
+    }
+
+    #[test]
+    fn returns_subtitles_not_found_for_missing_track_id() {
+        let tracks = vec![track_with_id("ru_0_ru.vtt")];
+
+        assert!(matches!(
+            select_track_by_id(&tracks, "de_1_de.vtt"),
+            Err(crate::vk::errors::VkLoadError::SubtitlesNotFound)
+        ));
+    }
+
+    #[test]
+    fn assembles_loaded_subtitle_track() {
+        let selected = track_with_id("de_1_de.vtt");
+        let loaded = assemble_loaded_subtitle_track(selected, "WEBVTT\n\nHallo".to_string());
+
+        assert_eq!(loaded.selected_track_id, "de_1_de.vtt");
+        assert_eq!(loaded.subtitle_text, "WEBVTT\n\nHallo");
     }
 }

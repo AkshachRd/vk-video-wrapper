@@ -4,7 +4,10 @@ mod vk;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![vk::command::load_video_from_url])
+        .invoke_handler(tauri::generate_handler![
+            vk::command::load_video_from_url,
+            vk::command::load_subtitle_track
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
