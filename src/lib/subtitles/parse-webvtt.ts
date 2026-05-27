@@ -1,7 +1,7 @@
 import type { SubtitleCue, SubtitleWord } from "./types";
 
 const TIMING_SEPARATOR = "-->";
-const INLINE_TIMESTAMP_RE = /<(\d{2}:\d{2}:\d{2}[.,]\d{3})>/g;
+const INLINE_TIMESTAMP_RE = /<((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})>/g;
 const TAG_RE = /<\/?[a-z][^>]*>/gi;
 const EDGE_PUNCTUATION_RE = /^[\p{P}\p{S}\s]+|[\p{P}\p{S}\s]+$/gu;
 

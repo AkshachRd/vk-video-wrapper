@@ -14,14 +14,18 @@ export interface SubtitleCue {
   words: SubtitleWord[];
 }
 
+export type SubtitleRole = "primary" | "secondary";
+
+export type SubtitleSource = "vk-track" | "machine-translation";
+
 export interface SubtitleLane {
-  role: "primary" | "secondary";
-  source: "vk-track" | "machine-translation";
+  role: SubtitleRole;
+  source: SubtitleSource;
   trackId?: string;
   cues: SubtitleCue[];
 }
 
-export interface VkSubtitleTrack {
+export interface SubtitleTrack {
   id: string;
   lang: string;
   title: string;
@@ -39,7 +43,7 @@ export interface LoadedVideo {
     accessKey?: string;
   };
   embedUrl: string;
-  tracks: VkSubtitleTrack[];
+  tracks: SubtitleTrack[];
   selectedTrackId: string;
   subtitleText: string;
 }

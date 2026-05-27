@@ -100,6 +100,42 @@ Second subtitle
       },
     ]);
   });
+
+  it("cleans VK inline minute timestamps with dot and comma milliseconds", () => {
+    const cues = parseWebVtt(`WEBVTT
+
+00:00:10.000 --> 00:00:15.000
+Ready <00:12.345>set <00:13,500>go.
+`);
+
+    expect(cues).toEqual([
+      {
+        id: "cue-1",
+        startMs: 10000,
+        endMs: 15000,
+        text: "Ready set go.",
+        words: [
+          {
+            id: "cue-1:0",
+            text: "Ready",
+            cleanText: "Ready",
+          },
+          {
+            id: "cue-1:1",
+            text: "set",
+            cleanText: "set",
+            startMs: 12345,
+          },
+          {
+            id: "cue-1:2",
+            text: "go.",
+            cleanText: "go",
+            startMs: 13500,
+          },
+        ],
+      },
+    ]);
+  });
 });
 
 describe("cleanWord", () => {
