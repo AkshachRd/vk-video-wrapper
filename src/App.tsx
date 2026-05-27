@@ -97,7 +97,21 @@ export default function App() {
 }
 
 function mapLoadError(error: unknown): string {
-  const code = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+  const code = typeof error === "string" ? extractErrorCode(error) : error instanceof Error ? error.message : "";
 
   return LOAD_ERROR_MESSAGES[code] ?? UNKNOWN_LOAD_ERROR;
+}
+
+function extractErrorCode(error: string): string {
+  try {
+    const parsed = JSON.parse(error) as { kind?: unknown };
+
+    if (typeof parsed.kind === "string") {
+      return parsed.kind;
+    }
+  } catch {
+    return error;
+  }
+
+  return error;
 }

@@ -77,9 +77,14 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "VK" })).toBeInTheDocument();
   });
 
-  it("maps subtitle-not-found backend errors to a user-facing message", async () => {
+  it("maps serialized subtitle-not-found backend errors to a user-facing message", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockRejectedValue("subtitles-not-found");
+    mocks.invoke.mockRejectedValue(
+      JSON.stringify({
+        kind: "subtitles-not-found",
+        message: "subtitles-not-found",
+      }),
+    );
 
     render(<App />);
 
