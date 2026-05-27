@@ -23,7 +23,6 @@ const SUBTITLE_PARSE_ERROR = "Subtitles could not be parsed for this video.";
 const TRACK_PARSE_ERROR = "Subtitles could not be parsed for this track.";
 
 type PendingSubtitlePause = {
-  cueId: string;
   stopAtMs: number;
   holdAtMs: number;
 };
@@ -35,6 +34,7 @@ export default function App() {
   const [video, setVideo] = useState<LoadedVideo | undefined>();
   const [lane, setLane] = useState<SubtitleLane | undefined>();
   const [timeMs, setTimeMs] = useState(0);
+  const [heldSubtitleTimeMs, setHeldSubtitleTimeMs] = useState<number | undefined>();
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [isTrackLoading, setIsTrackLoading] = useState(false);
   const requestIdRef = useRef(0);
@@ -49,11 +49,17 @@ export default function App() {
   );
 
   const handleSubtitleWordInspect = useCallback((cue: SubtitleCue) => {
+    const holdAtMs = Math.max(cue.startMs, cue.endMs - 1);
     pendingSubtitlePauseRef.current = {
-      cueId: cue.id,
       stopAtMs: cue.endMs,
-      holdAtMs: Math.max(cue.startMs, cue.endMs - 1),
+      holdAtMs,
     };
+    setHeldSubtitleTimeMs(holdAtMs);
+  }, []);
+
+  const handleSubtitleWordInspectEnd = useCallback(() => {
+    pendingSubtitlePauseRef.current = undefined;
+    setHeldSubtitleTimeMs(undefined);
   }, []);
 
   const handleTimeUpdate = useCallback((nextTimeMs: number) => {
@@ -89,6 +95,7 @@ export default function App() {
       setVideo(undefined);
       setLane(undefined);
       setTimeMs(0);
+      setHeldSubtitleTimeMs(undefined);
       setSelectedTrackId("");
       pendingSubtitlePauseRef.current = undefined;
 
@@ -148,6 +155,7 @@ export default function App() {
 
       setIsTrackLoading(true);
       setError(undefined);
+      setHeldSubtitleTimeMs(undefined);
       pendingSubtitlePauseRef.current = undefined;
 
       let loadedTrack: LoadedSubtitleTrack;
@@ -240,8 +248,9 @@ export default function App() {
               />
               <SubtitleOverlay
                 lane={lane}
-                timeMs={timeMs}
+                timeMs={heldSubtitleTimeMs ?? timeMs}
                 onWordInspect={handleSubtitleWordInspect}
+                onWordInspectEnd={handleSubtitleWordInspectEnd}
               />
             </div>
           </div>

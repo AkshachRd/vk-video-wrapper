@@ -6,9 +6,10 @@ type SubtitleOverlayProps = {
   lane: SubtitleLane;
   timeMs: number;
   onWordInspect?: (cue: SubtitleCue) => void;
+  onWordInspectEnd?: () => void;
 };
 
-export function SubtitleOverlay({ lane, timeMs, onWordInspect }: SubtitleOverlayProps) {
+export function SubtitleOverlay({ lane, timeMs, onWordInspect, onWordInspectEnd }: SubtitleOverlayProps) {
   const cue = selectActiveCue(lane.cues, timeMs);
   if (!cue) return null;
 
@@ -16,7 +17,7 @@ export function SubtitleOverlay({ lane, timeMs, onWordInspect }: SubtitleOverlay
     <div className="pointer-events-none absolute inset-x-0 bottom-7 flex justify-center px-8">
       <div className="pointer-events-auto max-w-4xl rounded-md bg-black/70 px-4 py-3 text-center text-2xl leading-relaxed text-white shadow-lg">
         {cue.words.map((word) => (
-          <Popover key={word.id}>
+          <Popover key={word.id} onOpenChange={(open) => !open && onWordInspectEnd?.()}>
             <PopoverTrigger asChild>
               <button
                 type="button"

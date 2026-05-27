@@ -84,6 +84,19 @@ describe("SubtitleOverlay", () => {
     expect(onWordInspect).toHaveBeenCalledWith(lane.cues[0]);
   });
 
+  it("notifies when a word popover closes", async () => {
+    const user = userEvent.setup();
+    const onWordInspectEnd = vi.fn();
+    render(<SubtitleOverlay lane={lane} timeMs={1200} onWordInspectEnd={onWordInspectEnd} />);
+
+    await user.click(screen.getByRole("button", { name: "Доброе" }));
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => {
+      expect(onWordInspectEnd).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("renders nothing when no cue is active", () => {
     render(<SubtitleOverlay lane={lane} timeMs={800} />);
 
