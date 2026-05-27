@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -118,7 +118,7 @@ describe("App", () => {
     mocks.readyPlayer.mockReset();
     mocks.parseWebVtt.mockImplementation((raw: string) => {
       if (raw.includes("Hallo Welt")) {
-        return [
+        const cues = [
           {
             id: "cue-de",
             startMs: 0,
@@ -130,6 +130,18 @@ describe("App", () => {
             ],
           },
         ];
+
+        if (raw.includes("Weiter")) {
+          cues.push({
+            id: "cue-de-2",
+            startMs: 1000,
+            endMs: 2000,
+            text: "Weiter",
+            words: [{ id: "cue-de-2:0", text: "Weiter", cleanText: "Weiter" }],
+          });
+        }
+
+        return cues;
       }
 
       if (!raw.includes("Hello from VK")) {
@@ -345,6 +357,286 @@ describe("App", () => {
 
     expect(await screen.findByRole("button", { name: "Hallo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Welt" })).toBeInTheDocument();
+  });
+
+  it("ignores stale subtitle track loads after a new video starts loading", async () => {
+    const user = userEvent.setup();
+    let loadCount = 0;
+    let resolveTrackLoad: (track: { selectedTrackId: string; subtitleText: string }) => void = () => {};
+
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "load_video_from_url") {
+        loadCount += 1;
+
+        if (loadCount === 1) {
+          return Promise.resolve(
+            loadedVideo({
+              tracks: subtitleTracks,
+              selectedTrackId: "ru_0_ru.vtt",
+            }),
+          );
+        }
+
+        return Promise.resolve(
+          loadedVideo({
+            videoId: {
+              ownerId: -3,
+              videoId: 4,
+            },
+            embedUrl: "https://vk.com/video_ext.php?oid=-3&id=4&hash=def",
+            tracks: subtitleTracks,
+            selectedTrackId: "ru_0_ru.vtt",
+          }),
+        );
+      }
+
+      if (command === "load_subtitle_track") {
+        return new Promise((resolve) => {
+          resolveTrackLoad = resolve;
+        });
+      }
+
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    const input = screen.getByLabelText("VK Video URL");
+    await user.type(input, "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+
+    await user.clear(input);
+    await user.type(input, "https://vkvideo.ru/video-3_4");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(await screen.findByText(/oid=-3&id=4/)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
+
+    await act(async () => {
+      resolveTrackLoad({
+        selectedTrackId: "de_1_de.vtt",
+        subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+      });
+    });
+
+    expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
+    expect(screen.queryByRole("button", { name: "Hallo" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
+  });
+
+  it("looks up German words and renders Russian dictionary details", async () => {
+    const user = userEvent.setup();
+    let resolveLookup: (lookup: unknown) => void = () => {};
+
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+
+      if (command === "lookup_german_word") {
+        return new Promise((resolve) => {
+          resolveLookup = resolve;
+        });
+      }
+
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Hallo" }));
+
+    expect(screen.getByText("Ищу в словаре...")).toBeInTheDocument();
+    expect(mocks.invoke).toHaveBeenCalledWith("lookup_german_word", {
+      word: "Hallo",
+      cueText: "Hallo Welt",
+      trackLang: "de",
+    });
+
+    await act(async () => {
+      resolveLookup({
+        query: "Hallo",
+        headword: "hallo",
+        ipa: "haˈloː",
+        partOfSpeech: "междометие",
+        grammar: ["приветствие"],
+        meanings: ["привет"],
+        source: "ruwiktionary",
+        sourceUrl: "https://ru.wiktionary.org/wiki/hallo",
+      });
+    });
+
+    expect(await screen.findByText("Значение")).toBeInTheDocument();
+    expect(screen.getByText("привет")).toBeInTheDocument();
+    expect(screen.getByText("Грамматика")).toBeInTheDocument();
+  });
+
+  it("shows a not-found dictionary lookup state", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+
+      return Promise.reject(JSON.stringify({ kind: "not-found", message: "not-found" }));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Hallo" }));
+
+    expect(await screen.findByText("Слово не найдено в немецком словаре")).toBeInTheDocument();
+  });
+
+  it("shows an unavailable dictionary lookup state", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+
+      return Promise.reject(
+        JSON.stringify({ kind: "dictionary-unavailable", message: "dictionary-unavailable" }),
+      );
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Hallo" }));
+
+    expect(await screen.findByText("Словарь сейчас недоступен")).toBeInTheDocument();
+  });
+
+  it("does not call dictionary lookup for non-German tracks", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockResolvedValue(
+      loadedVideo({
+        tracks: subtitleTracks,
+        selectedTrackId: "ru_0_ru.vtt",
+      }),
+    );
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Hello" }));
+
+    expect(screen.getByLabelText("Word details: Hello")).toHaveTextContent("Hello");
+    expect(mocks.invoke.mock.calls.some(([command]) => command === "lookup_german_word")).toBe(false);
+  });
+
+  it("holds and releases a German cue while dictionary lookup is active", async () => {
+    const user = userEvent.setup();
+    let resolveLookup: (lookup: unknown) => void = () => {};
+
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: [
+              "WEBVTT",
+              "",
+              "00:00:00.000 --> 00:00:01.000",
+              "Hallo Welt",
+              "",
+              "00:00:01.000 --> 00:00:02.000",
+              "Weiter",
+            ].join("\n"),
+          }),
+        );
+      }
+
+      if (command === "lookup_german_word") {
+        return new Promise((resolve) => {
+          resolveLookup = resolve;
+        });
+      }
+
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await screen.findByText(/video_ext\.php/);
+
+    act(() => {
+      mocks.readyPlayer();
+      mocks.emitTimeUpdate(500);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Hallo" }));
+
+    expect(screen.getByText("Ищу в словаре...")).toBeInTheDocument();
+
+    act(() => {
+      mocks.emitTimeUpdate(1000);
+    });
+
+    expect(mocks.pausePlayer).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Hallo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hallo" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByRole("button", { name: "Weiter" })).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Ищу в словаре...")).not.toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText("Word details: Hallo")).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveLookup({
+        query: "Hallo",
+        headword: "hallo",
+        grammar: ["приветствие"],
+        meanings: ["привет"],
+        source: "ruwiktionary",
+      });
+    });
+
+    expect(screen.queryByText("привет")).not.toBeInTheDocument();
+
+    act(() => {
+      mocks.emitPlaybackStart();
+      mocks.emitTimeUpdate(1200);
+    });
+
+    expect(screen.queryByRole("button", { name: "Hallo" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Weiter" })).toBeInTheDocument();
   });
 
   it("pauses before moving to the next subtitle after a word is clicked", async () => {

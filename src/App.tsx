@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
 import { VideoPlayer } from "@/components/video-player";
+import { isGermanTrackLang } from "@/lib/dictionary/is-german-track";
+import type { GermanWordLookup, WordLookupState } from "@/lib/dictionary/types";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
-import type { LoadedSubtitleTrack, LoadedVideo, SubtitleCue, SubtitleLane, SubtitleTrack } from "@/lib/subtitles/types";
+import type { LoadedSubtitleTrack, LoadedVideo, SubtitleCue, SubtitleLane, SubtitleTrack, SubtitleWord } from "@/lib/subtitles/types";
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
 
 const LOAD_ERROR_MESSAGES: Record<string, string> = {
@@ -37,9 +39,18 @@ export default function App() {
   const [heldSubtitleTimeMs, setHeldSubtitleTimeMs] = useState<number | undefined>();
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [isTrackLoading, setIsTrackLoading] = useState(false);
+  const [wordLookup, setWordLookup] = useState<WordLookupState>({ status: "idle" });
   const requestIdRef = useRef(0);
+  const trackRequestIdRef = useRef(0);
+  const lookupRequestIdRef = useRef(0);
   const playerControlsRef = useRef<Pick<VkPlayerControls, "pause"> | undefined>(undefined);
   const pendingSubtitlePauseRef = useRef<PendingSubtitlePause | undefined>(undefined);
+  const selectedTrack = video?.tracks.find((track) => track.id === selectedTrackId);
+
+  const resetWordLookup = useCallback(() => {
+    lookupRequestIdRef.current += 1;
+    setWordLookup({ status: "idle" });
+  }, []);
 
   const handlePlayerControlsReady = useCallback(
     (controls: Pick<VkPlayerControls, "pause"> | undefined) => {
@@ -48,19 +59,55 @@ export default function App() {
     [],
   );
 
-  const handleSubtitleWordInspect = useCallback((cue: SubtitleCue) => {
-    const holdAtMs = Math.max(cue.startMs, cue.endMs - 1);
-    pendingSubtitlePauseRef.current = {
-      stopAtMs: cue.endMs,
-      holdAtMs,
-    };
-    setHeldSubtitleTimeMs(holdAtMs);
-  }, []);
+  const handleSubtitleWordInspect = useCallback(
+    (cue: SubtitleCue, word: SubtitleWord) => {
+      const holdAtMs = Math.max(cue.startMs, cue.endMs - 1);
+      pendingSubtitlePauseRef.current = {
+        stopAtMs: cue.endMs,
+        holdAtMs,
+      };
+      setHeldSubtitleTimeMs(holdAtMs);
+
+      if (!selectedTrack || !isGermanTrackLang(selectedTrack.lang)) {
+        lookupRequestIdRef.current += 1;
+        setWordLookup({ status: "idle" });
+        return;
+      }
+
+      const query = word.cleanText || word.text;
+      const requestId = lookupRequestIdRef.current + 1;
+      lookupRequestIdRef.current = requestId;
+
+      setWordLookup({ status: "loading", query });
+      void invoke<GermanWordLookup>("lookup_german_word", {
+        word: query,
+        cueText: cue.text,
+        trackLang: selectedTrack.lang,
+      })
+        .then((data) => {
+          if (lookupRequestIdRef.current === requestId) {
+            setWordLookup({ status: "ready", query, data });
+          }
+        })
+        .catch((lookupError: unknown) => {
+          if (lookupRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          setWordLookup({
+            status: extractErrorCode(lookupError) === "not-found" ? "not-found" : "unavailable",
+            query,
+          });
+        });
+    },
+    [selectedTrack],
+  );
 
   const handleSubtitleWordInspectEnd = useCallback(() => {
     pendingSubtitlePauseRef.current = undefined;
     setHeldSubtitleTimeMs(undefined);
-  }, []);
+    resetWordLookup();
+  }, [resetWordLookup]);
 
   const handlePlaybackStart = useCallback(() => {
     if (pendingSubtitlePauseRef.current) {
@@ -97,8 +144,11 @@ export default function App() {
 
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
+      trackRequestIdRef.current += 1;
 
+      resetWordLookup();
       setIsLoading(true);
+      setIsTrackLoading(false);
       setError(undefined);
       setVideo(undefined);
       setLane(undefined);
@@ -151,7 +201,7 @@ export default function App() {
         cues,
       });
     },
-    [isLoading, url],
+    [isLoading, resetWordLookup, url],
   );
 
   const handleTrackChange = useCallback(
@@ -161,6 +211,10 @@ export default function App() {
         return;
       }
 
+      const trackRequestId = trackRequestIdRef.current + 1;
+      trackRequestIdRef.current = trackRequestId;
+
+      resetWordLookup();
       setIsTrackLoading(true);
       setError(undefined);
       setHeldSubtitleTimeMs(undefined);
@@ -174,8 +228,14 @@ export default function App() {
           trackId: nextTrackId,
         });
       } catch (trackLoadError) {
-        setError(mapTrackLoadError(trackLoadError));
-        setIsTrackLoading(false);
+        if (trackRequestIdRef.current === trackRequestId) {
+          setError(mapTrackLoadError(trackLoadError));
+          setIsTrackLoading(false);
+        }
+        return;
+      }
+
+      if (trackRequestIdRef.current !== trackRequestId) {
         return;
       }
 
@@ -184,14 +244,22 @@ export default function App() {
       try {
         cues = parseWebVtt(loadedTrack.subtitleText);
       } catch {
-        setError(TRACK_PARSE_ERROR);
-        setIsTrackLoading(false);
+        if (trackRequestIdRef.current === trackRequestId) {
+          setError(TRACK_PARSE_ERROR);
+          setIsTrackLoading(false);
+        }
         return;
       }
 
       if (cues.length === 0) {
-        setError(TRACK_PARSE_ERROR);
-        setIsTrackLoading(false);
+        if (trackRequestIdRef.current === trackRequestId) {
+          setError(TRACK_PARSE_ERROR);
+          setIsTrackLoading(false);
+        }
+        return;
+      }
+
+      if (trackRequestIdRef.current !== trackRequestId) {
         return;
       }
 
@@ -204,7 +272,7 @@ export default function App() {
       });
       setIsTrackLoading(false);
     },
-    [isTrackLoading, lane, selectedTrackId, video],
+    [isTrackLoading, lane, resetWordLookup, selectedTrackId, video],
   );
 
   return (
@@ -258,6 +326,7 @@ export default function App() {
               <SubtitleOverlay
                 lane={lane}
                 timeMs={heldSubtitleTimeMs ?? timeMs}
+                wordLookup={wordLookup}
                 onWordInspect={handleSubtitleWordInspect}
                 onWordInspectEnd={handleSubtitleWordInspectEnd}
               />
@@ -275,13 +344,13 @@ function formatTrackLabel(track: SubtitleTrack): string {
 }
 
 function mapLoadError(error: unknown): string {
-  const code = typeof error === "string" ? extractErrorCode(error) : error instanceof Error ? error.message : "";
+  const code = extractErrorCode(error);
 
   return LOAD_ERROR_MESSAGES[code] ?? UNKNOWN_LOAD_ERROR;
 }
 
 function mapTrackLoadError(error: unknown): string {
-  const code = typeof error === "string" ? extractErrorCode(error) : error instanceof Error ? error.message : "";
+  const code = extractErrorCode(error);
 
   switch (code) {
     case "subtitles-not-found":
@@ -295,16 +364,18 @@ function mapTrackLoadError(error: unknown): string {
   }
 }
 
-function extractErrorCode(error: string): string {
+function extractErrorCode(error: unknown): string {
+  const message = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+
   try {
-    const parsed = JSON.parse(error) as { kind?: unknown };
+    const parsed = JSON.parse(message) as { kind?: unknown };
 
     if (typeof parsed.kind === "string") {
       return parsed.kind;
     }
   } catch {
-    return error;
+    return message;
   }
 
-  return error;
+  return message;
 }
