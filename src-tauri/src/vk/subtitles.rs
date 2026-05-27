@@ -27,10 +27,7 @@ pub async fn fetch_subtitle_text(track: &VkSubtitleTrack) -> Result<String, VkLo
 
     ensure_subtitle_response_status(response.status())?;
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|_| VkLoadError::SubtitleFetchFailed)?;
+    let bytes = read_limited_subtitle_bytes(response).await?;
     subtitle_text_from_bytes(&bytes)
 }
 
@@ -85,6 +82,33 @@ fn ensure_subtitle_response_status(status: reqwest::StatusCode) -> Result<(), Vk
     } else {
         Err(VkLoadError::SubtitleFetchFailed)
     }
+}
+
+async fn read_limited_subtitle_bytes(
+    mut response: reqwest::Response,
+) -> Result<Vec<u8>, VkLoadError> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| VkLoadError::SubtitleFetchFailed)?
+    {
+        append_subtitle_chunk(&mut bytes, &chunk)?;
+    }
+    Ok(bytes)
+}
+
+fn append_subtitle_chunk(bytes: &mut Vec<u8>, chunk: &[u8]) -> Result<(), VkLoadError> {
+    let next_len = bytes
+        .len()
+        .checked_add(chunk.len())
+        .ok_or(VkLoadError::SubtitleFetchFailed)?;
+    if next_len > MAX_SUBTITLE_BYTES {
+        return Err(VkLoadError::SubtitleFetchFailed);
+    }
+
+    bytes.extend_from_slice(chunk);
+    Ok(())
 }
 
 fn subtitle_text_from_bytes(bytes: &[u8]) -> Result<String, VkLoadError> {
@@ -222,6 +246,27 @@ mod tests {
             subtitle_text_from_bytes(&bytes),
             Err(VkLoadError::SubtitleFetchFailed)
         ));
+    }
+
+    #[test]
+    fn accumulates_subtitle_chunks_until_limit() {
+        let mut bytes = Vec::new();
+
+        append_subtitle_chunk(&mut bytes, b"WEB").unwrap();
+        append_subtitle_chunk(&mut bytes, b"VTT").unwrap();
+
+        assert_eq!(bytes, b"WEBVTT");
+    }
+
+    #[test]
+    fn rejects_chunk_that_would_exceed_limit_without_appending() {
+        let mut bytes = vec![b'a'; MAX_SUBTITLE_BYTES - 1];
+
+        assert!(matches!(
+            append_subtitle_chunk(&mut bytes, b"aa"),
+            Err(VkLoadError::SubtitleFetchFailed)
+        ));
+        assert_eq!(bytes.len(), MAX_SUBTITLE_BYTES - 1);
     }
 
     #[test]
