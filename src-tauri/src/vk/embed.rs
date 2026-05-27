@@ -1,3 +1,4 @@
+use encoding_rs::{Encoding, UTF_8};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -83,10 +84,15 @@ pub async fn fetch_embed_metadata(id: &VkVideoId) -> Result<VkEmbedMetadata, VkL
         return Err(VkLoadError::VideoUnavailable);
     }
 
-    let html = response
-        .text()
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .cloned();
+    let bytes = response
+        .bytes()
         .await
         .map_err(|_| VkLoadError::VideoUnavailable)?;
+    let html = decode_embed_html(&bytes, content_type.as_ref());
     let mut metadata = extract_embed_metadata(&html)?;
     metadata.embed_url = embed_url;
     Ok(metadata)
@@ -109,6 +115,32 @@ fn build_embed_request(
         .header(reqwest::header::REFERER, EMBED_REFERER)
         .build()
         .map_err(|_| VkLoadError::VideoUnavailable)
+}
+
+fn decode_embed_html(bytes: &[u8], content_type: Option<&reqwest::header::HeaderValue>) -> String {
+    let charset = content_type
+        .and_then(|value| value.to_str().ok())
+        .and_then(extract_charset);
+    let encoding = charset
+        .as_deref()
+        .and_then(|label| Encoding::for_label(label.as_bytes()))
+        .unwrap_or(UTF_8);
+    let (decoded, _, _) = encoding.decode(bytes);
+
+    decoded.into_owned()
+}
+
+fn extract_charset(content_type: &str) -> Option<String> {
+    content_type.split(';').find_map(|part| {
+        let (key, value) = part.trim().split_once('=')?;
+        key.trim().eq_ignore_ascii_case("charset").then(|| {
+            value
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_ascii_lowercase()
+        })
+    })
 }
 
 fn extract_tracks(html: &str) -> Result<Vec<VkSubtitleTrack>, VkLoadError> {
@@ -208,7 +240,7 @@ mod tests {
     use super::*;
     use crate::vk::errors::VkLoadError;
     use crate::vk::link_parser::VkVideoId;
-    use reqwest::header::{REFERER, USER_AGENT};
+    use reqwest::header::{HeaderValue, REFERER, USER_AGENT};
 
     #[test]
     fn builds_vk_embed_url() {
@@ -266,6 +298,29 @@ mod tests {
         assert_eq!(
             metadata.tracks[0].url,
             "https://vkvd737.okcdn.ru/subtitles/ru]auto.vtt"
+        );
+    }
+
+    #[test]
+    fn decodes_windows_1251_embed_html_before_extracting_tracks() {
+        let mut bytes =
+            br#"var playerParams = {"subtitles":[{"lang":"ru","title":"ru.srt","url":"https:\/\/vkvd737.okcdn.ru\/?subId=1","manifest_name":""#
+                .to_vec();
+        bytes.extend_from_slice(&[0xD0, 0xF3, 0xF1, 0xF1, 0xEA, 0xE8, 0xE9]);
+        bytes.extend_from_slice(br#"","is_auto":false,"storage_index":0}]};"#);
+
+        let content_type = HeaderValue::from_static("text/html; charset=windows-1251");
+        let html = decode_embed_html(&bytes, Some(&content_type));
+        let metadata = extract_embed_metadata(&html).unwrap();
+
+        assert_eq!(metadata.tracks[0].manifest_name, "Русский");
+    }
+
+    #[test]
+    fn extracts_charset_from_content_type_case_insensitively() {
+        assert_eq!(
+            extract_charset("text/html; Charset=\"windows-1251\""),
+            Some("windows-1251".to_string())
         );
     }
 
