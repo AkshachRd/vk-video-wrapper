@@ -1,6 +1,9 @@
 use encoding_rs::{Encoding, UTF_8};
+use quick_xml::events::{BytesRef, BytesStart, BytesText, Event};
+use quick_xml::Reader;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::time::Duration;
 use url::Url;
 
@@ -63,7 +66,8 @@ pub fn build_embed_url(id: &VkVideoId) -> String {
     url.to_string()
 }
 
-pub fn extract_embed_metadata(html: &str) -> Result<VkEmbedMetadata, VkLoadError> {
+#[cfg(test)]
+fn extract_embed_metadata(html: &str) -> Result<VkEmbedMetadata, VkLoadError> {
     let tracks = extract_tracks(html)?;
     Ok(VkEmbedMetadata {
         embed_url: String::new(),
@@ -93,7 +97,18 @@ pub async fn fetch_embed_metadata(id: &VkVideoId) -> Result<VkEmbedMetadata, VkL
         .await
         .map_err(|_| VkLoadError::VideoUnavailable)?;
     let html = decode_embed_html(&bytes, content_type.as_ref());
-    let mut metadata = extract_embed_metadata(&html)?;
+
+    let static_tracks = extract_tracks(&html).unwrap_or_default();
+    let dash_tracks = fetch_dash_subtitle_tracks(&client, &html).await;
+    let tracks = merge_subtitle_tracks(static_tracks, dash_tracks);
+    if tracks.is_empty() {
+        return Err(VkLoadError::SubtitlesNotFound);
+    }
+
+    let mut metadata = VkEmbedMetadata {
+        embed_url: String::new(),
+        tracks,
+    };
     metadata.embed_url = embed_url;
     Ok(metadata)
 }
@@ -178,6 +193,269 @@ fn extract_tracks(html: &str) -> Result<Vec<VkSubtitleTrack>, VkLoadError> {
         Err(VkLoadError::SubtitlesNotFound)
     } else {
         Ok(tracks)
+    }
+}
+
+async fn fetch_dash_subtitle_tracks(client: &reqwest::Client, html: &str) -> Vec<VkSubtitleTrack> {
+    let mut tracks = Vec::new();
+
+    for manifest_url in extract_dash_manifest_urls(html) {
+        let Ok(request) = client
+            .get(&manifest_url)
+            .header(reqwest::header::USER_AGENT, USER_AGENT_VALUE)
+            .header(reqwest::header::REFERER, "https://vk.com/")
+            .build()
+        else {
+            continue;
+        };
+        let Ok(response) = client.execute(request).await else {
+            continue;
+        };
+        if !response.status().is_success() {
+            continue;
+        }
+        let Ok(manifest) = response.text().await else {
+            continue;
+        };
+        tracks.extend(extract_dash_subtitle_tracks(&manifest, &manifest_url));
+    }
+
+    tracks
+}
+
+fn extract_dash_manifest_urls(html: &str) -> Vec<String> {
+    let re =
+        Regex::new(r#""dash_sep"\s*:\s*"((?:\\.|[^"\\])*)""#).expect("valid dash manifest regex");
+
+    re.captures_iter(html)
+        .filter_map(|captures| captures.get(1))
+        .filter_map(|url| decode_json_string(url.as_str()))
+        .collect()
+}
+
+fn decode_json_string(raw: &str) -> Option<String> {
+    serde_json::from_str::<String>(&format!("\"{raw}\"")).ok()
+}
+
+fn extract_dash_subtitle_tracks(mpd: &str, manifest_url: &str) -> Vec<VkSubtitleTrack> {
+    let Ok(manifest_url) = Url::parse(manifest_url) else {
+        return Vec::new();
+    };
+    let mut reader = Reader::from_str(mpd);
+    reader.config_mut().trim_text(true);
+
+    let mut current_text_track: Option<DashTextTrack> = None;
+    let mut reading_base_url = false;
+    let mut tracks = Vec::new();
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(element)) if element.name().as_ref() == b"AdaptationSet" => {
+                current_text_track = dash_text_track_from_adaptation_set(&element);
+            }
+            Ok(Event::Start(element)) if element.name().as_ref() == b"Representation" => {
+                if let Some(track) = &mut current_text_track {
+                    track.representation_id =
+                        xml_attribute(&element, b"id").unwrap_or_else(|| "subtitles".to_string());
+                }
+            }
+            Ok(Event::Start(element)) if element.name().as_ref() == b"BaseURL" => {
+                reading_base_url = current_text_track.is_some();
+            }
+            Ok(Event::Text(text)) if reading_base_url => {
+                if let (Some(track), Some(base_url)) =
+                    (&mut current_text_track, decode_xml_text(&text))
+                {
+                    track.base_url.push_str(&base_url);
+                }
+            }
+            Ok(Event::GeneralRef(reference)) if reading_base_url => {
+                if let (Some(track), Some(value)) =
+                    (&mut current_text_track, decode_xml_reference(&reference))
+                {
+                    track.base_url.push_str(&value);
+                }
+            }
+            Ok(Event::End(element)) if element.name().as_ref() == b"BaseURL" => {
+                reading_base_url = false;
+            }
+            Ok(Event::End(element)) if element.name().as_ref() == b"AdaptationSet" => {
+                if let Some(track) = current_text_track.take() {
+                    if let Some(track) =
+                        dash_text_track_to_subtitle_track(track, &manifest_url, tracks.len())
+                    {
+                        tracks.push(track);
+                    }
+                }
+                reading_base_url = false;
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => return Vec::new(),
+            _ => {}
+        }
+    }
+
+    tracks
+}
+
+#[derive(Debug)]
+struct DashTextTrack {
+    lang: String,
+    representation_id: String,
+    base_url: String,
+}
+
+fn dash_text_track_from_adaptation_set(element: &BytesStart<'_>) -> Option<DashTextTrack> {
+    let content_type = xml_attribute(element, b"contentType");
+    let mime_type = xml_attribute(element, b"mimeType");
+    let is_text = content_type.as_deref() == Some("text")
+        || mime_type
+            .as_deref()
+            .is_some_and(|value| value.eq_ignore_ascii_case("text/vtt"));
+    if !is_text {
+        return None;
+    }
+
+    Some(DashTextTrack {
+        lang: xml_attribute(element, b"lang").unwrap_or_default(),
+        representation_id: String::new(),
+        base_url: String::new(),
+    })
+}
+
+fn dash_text_track_to_subtitle_track(
+    track: DashTextTrack,
+    manifest_url: &Url,
+    fallback_index: usize,
+) -> Option<VkSubtitleTrack> {
+    if track.lang.trim().is_empty() || track.base_url.trim().is_empty() {
+        return None;
+    }
+
+    let representation_id = if track.representation_id.trim().is_empty() {
+        format!("subtitles_{fallback_index}")
+    } else {
+        track.representation_id
+    };
+    let subtitle_url = manifest_url.join(track.base_url.trim()).ok()?;
+    let storage_index = representation_id
+        .rsplit('_')
+        .next()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(fallback_index as i64);
+
+    Some(VkSubtitleTrack {
+        id: format!(
+            "dash_{}_{}",
+            track_id_part(&track.lang),
+            track_id_part(&representation_id)
+        ),
+        lang: track.lang.clone(),
+        title: format!("{representation_id}.vtt"),
+        url: subtitle_url.to_string(),
+        manifest_name: subtitle_label_for_lang(&track.lang),
+        is_auto: false,
+        storage_index,
+    })
+}
+
+fn xml_attribute(element: &BytesStart<'_>, name: &[u8]) -> Option<String> {
+    element
+        .attributes()
+        .flatten()
+        .find(|attribute| attribute.key.as_ref() == name)
+        .and_then(|attribute| {
+            attribute
+                .unescape_value()
+                .ok()
+                .map(|value| value.into_owned())
+        })
+}
+
+fn decode_xml_text(text: &BytesText<'_>) -> Option<String> {
+    text.decode().ok().map(|value| value.into_owned())
+}
+
+fn decode_xml_reference(reference: &BytesRef<'_>) -> Option<String> {
+    if let Ok(Some(ch)) = reference.resolve_char_ref() {
+        return Some(ch.to_string());
+    }
+
+    let value = reference.decode().ok()?;
+    match value.as_ref() {
+        "amp" => Some("&".to_string()),
+        "lt" => Some("<".to_string()),
+        "gt" => Some(">".to_string()),
+        "quot" => Some("\"".to_string()),
+        "apos" => Some("'".to_string()),
+        _ => None,
+    }
+}
+
+fn merge_subtitle_tracks(
+    primary_tracks: Vec<VkSubtitleTrack>,
+    additional_tracks: Vec<VkSubtitleTrack>,
+) -> Vec<VkSubtitleTrack> {
+    let mut seen_languages = HashSet::new();
+    let mut seen_ids = HashSet::new();
+    let mut tracks = Vec::with_capacity(primary_tracks.len() + additional_tracks.len());
+
+    for track in primary_tracks {
+        remember_track(&track, &mut seen_languages, &mut seen_ids);
+        tracks.push(track);
+    }
+
+    for track in additional_tracks {
+        let language_key = normalized_track_language(&track);
+        if !language_key.is_empty() && seen_languages.contains(&language_key) {
+            continue;
+        }
+        if seen_ids.contains(&track.id) {
+            continue;
+        }
+
+        remember_track(&track, &mut seen_languages, &mut seen_ids);
+        tracks.push(track);
+    }
+
+    tracks
+}
+
+fn remember_track(
+    track: &VkSubtitleTrack,
+    seen_languages: &mut HashSet<String>,
+    seen_ids: &mut HashSet<String>,
+) {
+    let language_key = normalized_track_language(track);
+    if !language_key.is_empty() {
+        seen_languages.insert(language_key);
+    }
+    seen_ids.insert(track.id.clone());
+}
+
+fn normalized_track_language(track: &VkSubtitleTrack) -> String {
+    track.lang.trim().to_ascii_lowercase()
+}
+
+fn track_id_part(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn subtitle_label_for_lang(lang: &str) -> String {
+    match lang.to_ascii_lowercase().as_str() {
+        "ru" => "Русский".to_string(),
+        "en" => "English".to_string(),
+        "de" => "Deutsch".to_string(),
+        _ => lang.to_ascii_uppercase(),
     }
 }
 
@@ -285,6 +563,95 @@ mod tests {
         assert_eq!(
             metadata.tracks[0].url,
             "https://vkvd737.okcdn.ru/?subId=1&id=1"
+        );
+    }
+
+    #[test]
+    fn extracts_dash_manifest_urls_from_embed_html() {
+        let html = r#"window.playerParams = {"dash_sep":"https:\/\/vkvd251.okcdn.ru\/?srcIp=1\u0026ct=6"};"#;
+
+        assert_eq!(
+            extract_dash_manifest_urls(html),
+            vec!["https://vkvd251.okcdn.ru/?srcIp=1&ct=6"]
+        );
+    }
+
+    #[test]
+    fn extracts_subtitle_tracks_from_dash_manifest() {
+        let mpd = r#"<?xml version="1.0" encoding="UTF-8"?>
+<MPD>
+  <Period>
+    <AdaptationSet id="1" mimeType="video/mp4"></AdaptationSet>
+    <AdaptationSet contentType="text" lang="ru" mimeType="text/vtt">
+      <Representation id="subtitles_0" bandwidth="141713">
+        <BaseURL>?expires=1&amp;type=2&amp;ix=0&amp;ct=13&amp;id=8209654024949</BaseURL>
+      </Representation>
+    </AdaptationSet>
+    <AdaptationSet contentType="text" lang="en" mimeType="text/vtt">
+      <Representation id="subtitles_1" bandwidth="110098">
+        <BaseURL>?expires=1&amp;type=2&amp;ix=1&amp;ct=13&amp;id=8209654024949</BaseURL>
+      </Representation>
+    </AdaptationSet>
+    <AdaptationSet contentType="text" lang="de" mimeType="text/vtt">
+      <Representation id="subtitles_2" bandwidth="113356">
+        <BaseURL>?expires=1&amp;type=2&amp;ix=2&amp;ct=13&amp;id=8209654024949</BaseURL>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>"#;
+
+        let tracks = extract_dash_subtitle_tracks(mpd, "https://vkvd251.okcdn.ru/?srcIp=1&ct=6");
+
+        assert_eq!(tracks.len(), 3);
+        assert_eq!(tracks[0].lang, "ru");
+        assert_eq!(tracks[0].manifest_name, "Русский");
+        assert_eq!(tracks[1].manifest_name, "English");
+        assert_eq!(tracks[2].id, "dash_de_subtitles_2");
+        assert_eq!(tracks[2].manifest_name, "Deutsch");
+        assert_eq!(
+            tracks[2].url,
+            "https://vkvd251.okcdn.ru/?expires=1&type=2&ix=2&ct=13&id=8209654024949"
+        );
+    }
+
+    #[test]
+    fn merges_dash_tracks_without_duplicate_languages() {
+        let static_ru = VkSubtitleTrack {
+            id: "ru_0_Nicos Weg (A1).ru.srt".to_string(),
+            lang: "ru".to_string(),
+            title: "Nicos Weg (A1).ru.srt".to_string(),
+            url: "https://vkvd251.okcdn.ru/?subId=1".to_string(),
+            manifest_name: "Русский".to_string(),
+            is_auto: false,
+            storage_index: 0,
+        };
+        let dash_ru = VkSubtitleTrack {
+            id: "dash_ru_subtitles_0".to_string(),
+            lang: "ru".to_string(),
+            title: "subtitles_0.vtt".to_string(),
+            url: "https://vkvd251.okcdn.ru/?ix=0".to_string(),
+            manifest_name: "Русский".to_string(),
+            is_auto: false,
+            storage_index: 0,
+        };
+        let dash_de = VkSubtitleTrack {
+            id: "dash_de_subtitles_2".to_string(),
+            lang: "de".to_string(),
+            title: "subtitles_2.vtt".to_string(),
+            url: "https://vkvd251.okcdn.ru/?ix=2".to_string(),
+            manifest_name: "Deutsch".to_string(),
+            is_auto: false,
+            storage_index: 2,
+        };
+
+        let tracks = merge_subtitle_tracks(vec![static_ru], vec![dash_ru, dash_de]);
+
+        assert_eq!(
+            tracks
+                .iter()
+                .map(|track| track.manifest_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Русский", "Deutsch"]
         );
     }
 

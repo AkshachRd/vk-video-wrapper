@@ -4335,6 +4335,7 @@ name = "vk-video-wrapper"
 version = "0.1.0"
 dependencies = [
  "encoding_rs",
+ "quick-xml",
  "regex",
  "reqwest 0.12.28",
  "serde",
