@@ -195,6 +195,40 @@ Tom&nbsp;&amp;&nbsp;Jerry says &quot;Hi&quot; &lt;tag&gt; &#39;ok&#39; &#x21;
       },
     ]);
   });
+
+  it("decodes WebVTT direction mark entities in cue text and words", () => {
+    const cues = parseWebVtt(`WEBVTT
+
+00:00:01.000 --> 00:00:03.000
+Start&lrm; middle &rlm;end
+`);
+
+    expect(cues).toEqual([
+      {
+        id: "cue-1",
+        startMs: 1000,
+        endMs: 3000,
+        text: "Start\u200e middle \u200fend",
+        words: [
+          {
+            id: "cue-1:0",
+            text: "Start\u200e",
+            cleanText: "Start\u200e",
+          },
+          {
+            id: "cue-1:1",
+            text: "middle",
+            cleanText: "middle",
+          },
+          {
+            id: "cue-1:2",
+            text: "\u200fend",
+            cleanText: "\u200fend",
+          },
+        ],
+      },
+    ]);
+  });
 });
 
 describe("cleanWord", () => {
