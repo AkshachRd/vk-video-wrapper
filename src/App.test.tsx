@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   parseWebVtt: vi.fn(),
   pausePlayer: vi.fn(),
   emitTimeUpdate: vi.fn(),
+  emitPlaybackStart: vi.fn(),
   readyPlayer: vi.fn(),
 }));
 
@@ -26,13 +27,16 @@ vi.mock("@/components/video-player", () => ({
   VideoPlayer: ({
     embedUrl,
     onTimeUpdate,
+    onPlaybackStart,
     onControlsReady,
   }: {
     embedUrl: string;
     onTimeUpdate: (timeMs: number) => void;
+    onPlaybackStart?: () => void;
     onControlsReady?: (controls: { pause: () => void } | undefined) => void;
   }) => {
     mocks.emitTimeUpdate.mockImplementation(onTimeUpdate);
+    mocks.emitPlaybackStart.mockImplementation(() => onPlaybackStart?.());
     mocks.readyPlayer.mockImplementation(() => onControlsReady?.({ pause: mocks.pausePlayer }));
 
     return (
@@ -110,6 +114,7 @@ describe("App", () => {
     mocks.parseWebVtt.mockReset();
     mocks.pausePlayer.mockReset();
     mocks.emitTimeUpdate.mockReset();
+    mocks.emitPlaybackStart.mockReset();
     mocks.readyPlayer.mockReset();
     mocks.parseWebVtt.mockImplementation((raw: string) => {
       if (raw.includes("Hallo Welt")) {
@@ -375,6 +380,67 @@ describe("App", () => {
 
     expect(mocks.pausePlayer).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hello" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();
+  });
+
+  it("releases an inspected subtitle when playback resumes", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockResolvedValue(loadedVideo());
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await screen.findByText(/video_ext\.php/);
+
+    act(() => {
+      mocks.readyPlayer();
+      mocks.emitTimeUpdate(500);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Hello" }));
+
+    act(() => {
+      mocks.emitTimeUpdate(1000);
+      mocks.emitTimeUpdate(1200);
+    });
+
+    expect(screen.getByRole("button", { name: "Hello" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();
+
+    act(() => {
+      mocks.emitPlaybackStart();
+      mocks.emitTimeUpdate(1200);
+    });
+
+    expect(screen.queryByRole("button", { name: "Hello" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+  });
+
+  it("keeps the boundary pause armed when playback starts before the inspected cue ends", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockResolvedValue(loadedVideo());
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await screen.findByText(/video_ext\.php/);
+
+    act(() => {
+      mocks.readyPlayer();
+      mocks.emitTimeUpdate(500);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Hello" }));
+
+    act(() => {
+      mocks.emitPlaybackStart();
+      mocks.emitTimeUpdate(1000);
+    });
+
+    expect(mocks.pausePlayer).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Hello" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();
   });

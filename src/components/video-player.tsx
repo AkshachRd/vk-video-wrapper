@@ -6,10 +6,11 @@ import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
 type VideoPlayerProps = {
   embedUrl: string;
   onTimeUpdate: (timeMs: number) => void;
+  onPlaybackStart?: () => void;
   onControlsReady?: (controls: Pick<VkPlayerControls, "pause"> | undefined) => void;
 };
 
-export function VideoPlayer({ embedUrl, onTimeUpdate, onControlsReady }: VideoPlayerProps) {
+export function VideoPlayer({ embedUrl, onTimeUpdate, onPlaybackStart, onControlsReady }: VideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export function VideoPlayer({ embedUrl, onTimeUpdate, onControlsReady }: VideoPl
         bridge = createVkPlayerBridge({
           iframe: iframeRef.current,
           onTimeUpdate,
+          onPlaybackStart,
         });
         onControlsReady?.({ pause: bridge.pause });
       } catch {
@@ -41,7 +43,7 @@ export function VideoPlayer({ embedUrl, onTimeUpdate, onControlsReady }: VideoPl
       onControlsReady?.(undefined);
       bridge?.destroy();
     };
-  }, [embedUrl, onControlsReady, onTimeUpdate]);
+  }, [embedUrl, onControlsReady, onPlaybackStart, onTimeUpdate]);
 
   return (
     <iframe

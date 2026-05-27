@@ -38,6 +38,37 @@ describe("createVkPlayerBridge", () => {
     expect(fakePlayer.off).toHaveBeenCalledWith("timeupdate", handlers.get("timeupdate"));
     expect(fakePlayer.destroy).toHaveBeenCalled();
   });
+
+  it("reports playback start when VK starts or resumes playback", () => {
+    const handlers = new Map<string, TimeUpdateHandler>();
+    const fakePlayer = {
+      on: vi.fn((event: string, handler: TimeUpdateHandler) => {
+        handlers.set(event, handler);
+      }),
+      off: vi.fn(),
+      pause: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const iframe = document.createElement("iframe");
+    const onPlaybackStart = vi.fn();
+
+    const bridge = createVkPlayerBridge({
+      iframe,
+      playerFactory: () => fakePlayer,
+      onTimeUpdate: vi.fn(),
+      onPlaybackStart,
+    });
+
+    handlers.get("started")?.({});
+    handlers.get("resumed")?.({});
+
+    expect(onPlaybackStart).toHaveBeenCalledTimes(2);
+
+    bridge.destroy();
+
+    expect(fakePlayer.off).toHaveBeenCalledWith("started", handlers.get("started"));
+    expect(fakePlayer.off).toHaveBeenCalledWith("resumed", handlers.get("resumed"));
+  });
 });
 
 describe("loadVkPlayerScript", () => {

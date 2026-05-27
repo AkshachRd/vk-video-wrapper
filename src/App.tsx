@@ -62,6 +62,14 @@ export default function App() {
     setHeldSubtitleTimeMs(undefined);
   }, []);
 
+  const handlePlaybackStart = useCallback(() => {
+    if (pendingSubtitlePauseRef.current) {
+      return;
+    }
+
+    setHeldSubtitleTimeMs(undefined);
+  }, []);
+
   const handleTimeUpdate = useCallback((nextTimeMs: number) => {
     const pendingPause = pendingSubtitlePauseRef.current;
 
@@ -244,6 +252,7 @@ export default function App() {
               <VideoPlayer
                 embedUrl={video.embedUrl}
                 onTimeUpdate={handleTimeUpdate}
+                onPlaybackStart={handlePlaybackStart}
                 onControlsReady={handlePlayerControlsReady}
               />
               <SubtitleOverlay

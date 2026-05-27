@@ -1,10 +1,10 @@
-type VkPlayerEvent = "timeupdate";
+type VkPlayerEvent = "timeupdate" | "started" | "resumed";
 type VkPlayerTimeUpdatePayload = { time?: number };
-type VkPlayerTimeUpdateHandler = (payload: VkPlayerTimeUpdatePayload) => void;
+type VkPlayerEventHandler = (payload: VkPlayerTimeUpdatePayload) => void;
 
 type VkPlayer = {
-  on(event: VkPlayerEvent, handler: VkPlayerTimeUpdateHandler): void;
-  off?(event: VkPlayerEvent, handler: VkPlayerTimeUpdateHandler): void;
+  on(event: VkPlayerEvent, handler: VkPlayerEventHandler): void;
+  off?(event: VkPlayerEvent, handler: VkPlayerEventHandler): void;
   pause(): void;
   destroy(): void;
 };
@@ -18,6 +18,7 @@ type VkWindow = Window & {
 type CreateVkPlayerBridgeOptions = {
   iframe: HTMLIFrameElement;
   onTimeUpdate: (timeMs: number) => void;
+  onPlaybackStart?: () => void;
   playerFactory?: (iframe: HTMLIFrameElement) => VkPlayer;
 };
 
@@ -34,14 +35,20 @@ let scriptLoadPromise: Promise<void> | undefined;
 export function createVkPlayerBridge({
   iframe,
   onTimeUpdate,
+  onPlaybackStart,
   playerFactory,
 }: CreateVkPlayerBridgeOptions): VkPlayerControls {
   const player = (playerFactory ?? createDefaultPlayer)(iframe);
-  const handleTimeUpdate: VkPlayerTimeUpdateHandler = (payload) => {
+  const handleTimeUpdate: VkPlayerEventHandler = (payload) => {
     onTimeUpdate(Math.round((payload.time ?? 0) * 1000));
+  };
+  const handlePlaybackStart: VkPlayerEventHandler = () => {
+    onPlaybackStart?.();
   };
 
   player.on("timeupdate", handleTimeUpdate);
+  player.on("started", handlePlaybackStart);
+  player.on("resumed", handlePlaybackStart);
 
   return {
     pause() {
@@ -49,6 +56,8 @@ export function createVkPlayerBridge({
     },
     destroy() {
       player.off?.("timeupdate", handleTimeUpdate);
+      player.off?.("started", handlePlaybackStart);
+      player.off?.("resumed", handlePlaybackStart);
       player.destroy();
     },
   };
