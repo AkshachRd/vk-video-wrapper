@@ -3,7 +3,16 @@ import type { SubtitleCue, SubtitleWord } from "./types";
 const TIMING_SEPARATOR = "-->";
 const INLINE_TIMESTAMP_RE = /<((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})>/g;
 const TAG_RE = /<\/?[a-z][^>]*>/gi;
+const ENTITY_RE = /&(#\d+|#x[\da-f]+|amp|lt|gt|quot|apos|nbsp);/gi;
 const EDGE_PUNCTUATION_RE = /^[\p{P}\p{S}\s]+|[\p{P}\p{S}\s]+$/gu;
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: " ",
+  quot: "\"",
+};
 
 export function parseWebVtt(raw: string): SubtitleCue[] {
   const blocks = raw
@@ -118,7 +127,8 @@ function cleanCueLine(line: string): string {
   return line
     .replace(INLINE_TIMESTAMP_RE, " ")
     .replace(TAG_RE, "")
-    .replace(/[ \t\f\v]+/g, " ")
+    .replace(ENTITY_RE, decodeEntity)
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -146,7 +156,11 @@ function appendWords(
   pendingStartMs: number | undefined,
 ): void {
   let nextStartMs = pendingStartMs;
-  const cleanedChunk = rawChunk.replace(TAG_RE, " ").replace(/[ \t\n\f\r\v]+/g, " ").trim();
+  const cleanedChunk = rawChunk
+    .replace(TAG_RE, " ")
+    .replace(ENTITY_RE, decodeEntity)
+    .replace(/\s+/g, " ")
+    .trim();
 
   if (!cleanedChunk) {
     return;
@@ -165,5 +179,28 @@ function appendWords(
     }
 
     words.push(word);
+  }
+}
+
+function decodeEntity(entity: string, value: string): string {
+  const normalized = value.toLowerCase();
+  const namedEntity = NAMED_ENTITIES[normalized];
+
+  if (namedEntity !== undefined) {
+    return namedEntity;
+  }
+
+  const codePoint = normalized.startsWith("#x")
+    ? Number.parseInt(normalized.slice(2), 16)
+    : Number.parseInt(normalized.slice(1), 10);
+
+  if (!Number.isFinite(codePoint)) {
+    return entity;
+  }
+
+  try {
+    return String.fromCodePoint(codePoint);
+  } catch {
+    return entity;
   }
 }

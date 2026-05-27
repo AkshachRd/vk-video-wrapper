@@ -136,6 +136,65 @@ Ready <00:12.345>set <00:13,500>go.
       },
     ]);
   });
+
+  it("decodes common WebVTT entities in cue text and words", () => {
+    const cues = parseWebVtt(`WEBVTT
+
+00:00:01.000 --> 00:00:03.000
+Tom&nbsp;&amp;&nbsp;Jerry says &quot;Hi&quot; &lt;tag&gt; &#39;ok&#39; &#x21;
+`);
+
+    expect(cues).toEqual([
+      {
+        id: "cue-1",
+        startMs: 1000,
+        endMs: 3000,
+        text: "Tom & Jerry says \"Hi\" <tag> 'ok' !",
+        words: [
+          {
+            id: "cue-1:0",
+            text: "Tom",
+            cleanText: "Tom",
+          },
+          {
+            id: "cue-1:1",
+            text: "&",
+            cleanText: "",
+          },
+          {
+            id: "cue-1:2",
+            text: "Jerry",
+            cleanText: "Jerry",
+          },
+          {
+            id: "cue-1:3",
+            text: "says",
+            cleanText: "says",
+          },
+          {
+            id: "cue-1:4",
+            text: "\"Hi\"",
+            cleanText: "Hi",
+          },
+          {
+            id: "cue-1:5",
+            text: "<tag>",
+            cleanText: "tag",
+          },
+          {
+            id: "cue-1:6",
+            text: "'ok'",
+            cleanText: "ok",
+          },
+          {
+            id: "cue-1:7",
+            text: "!",
+            cleanText: "",
+          },
+        ],
+      },
+    ]);
+  });
 });
 
 describe("cleanWord", () => {
