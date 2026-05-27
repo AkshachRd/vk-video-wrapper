@@ -8,10 +8,15 @@ import App from "./App";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
+  parseWebVtt: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: mocks.invoke,
+}));
+
+vi.mock("@/lib/subtitles/parse-webvtt", () => ({
+  parseWebVtt: mocks.parseWebVtt,
 }));
 
 vi.mock("@/components/video-player", () => ({
@@ -53,6 +58,26 @@ function loadedVideo(overrides: Partial<LoadedVideo> = {}): LoadedVideo {
 describe("App", () => {
   beforeEach(() => {
     mocks.invoke.mockReset();
+    mocks.parseWebVtt.mockReset();
+    mocks.parseWebVtt.mockImplementation((raw: string) => {
+      if (!raw.includes("Hello from VK")) {
+        return [];
+      }
+
+      return [
+        {
+          id: "cue-1",
+          startMs: 0,
+          endMs: 1000,
+          text: "Hello from VK",
+          words: [
+            { id: "cue-1:0", text: "Hello", cleanText: "Hello" },
+            { id: "cue-1:1", text: "from", cleanText: "from" },
+            { id: "cue-1:2", text: "VK", cleanText: "VK" },
+          ],
+        },
+      ];
+    });
   });
 
   it("loads a VK video, parses subtitles, and renders the player", async () => {
@@ -96,6 +121,20 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("maps plain string backend errors to a user-facing message", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockRejectedValue("subtitles-not-found");
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(
+      await screen.findByText("Subtitles were not found for this video."),
+    ).toBeInTheDocument();
+  });
+
   it("shows a subtitle parse error when loaded subtitle text has no cues", async () => {
     const user = userEvent.setup();
     mocks.invoke.mockResolvedValue(
@@ -112,5 +151,60 @@ describe("App", () => {
     expect(
       await screen.findByText("Subtitles could not be parsed for this video."),
     ).toBeInTheDocument();
+  });
+
+  it("shows a subtitle parse error when subtitle parsing throws", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockResolvedValue(loadedVideo());
+    mocks.parseWebVtt.mockImplementationOnce(() => {
+      throw new Error("parser failed");
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(
+      await screen.findByText("Subtitles could not be parsed for this video."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not invoke the backend for a blank URL", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "   ");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("disables loading controls and ignores duplicate submits while loading", async () => {
+    const user = userEvent.setup();
+    let resolveLoad: (video: LoadedVideo) => void = () => {};
+    mocks.invoke.mockReturnValue(
+      new Promise<LoadedVideo>((resolve) => {
+        resolveLoad = resolve;
+      }),
+    );
+
+    render(<App />);
+
+    const input = screen.getByLabelText("VK Video URL");
+    await user.type(input, "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(input).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Loading..." })).toBeDisabled();
+
+    await user.keyboard("{Enter}");
+
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+
+    resolveLoad(loadedVideo());
+
+    expect(await screen.findByText("Loaded subtitles")).toBeInTheDocument();
   });
 });

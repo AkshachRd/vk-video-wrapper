@@ -1,4 +1,4 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { Alert } from "@/components/ui/alert";
@@ -27,10 +27,19 @@ export default function App() {
   const [video, setVideo] = useState<LoadedVideo | undefined>();
   const [lane, setLane] = useState<SubtitleLane | undefined>();
   const [timeMs, setTimeMs] = useState(0);
+  const requestIdRef = useRef(0);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
+
+      const trimmedUrl = url.trim();
+      if (isLoading || !trimmedUrl) {
+        return;
+      }
+
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
 
       setIsLoading(true);
       setError(undefined);
@@ -38,31 +47,50 @@ export default function App() {
       setLane(undefined);
       setTimeMs(0);
 
+      let loadedVideo: LoadedVideo;
+
       try {
-        const loadedVideo = await invoke<LoadedVideo>("load_video_from_url", {
-          url: url.trim(),
-        });
-        const cues = parseWebVtt(loadedVideo.subtitleText);
-
-        if (cues.length === 0) {
-          setError(SUBTITLE_PARSE_ERROR);
-          return;
-        }
-
-        setVideo(loadedVideo);
-        setLane({
-          role: "primary",
-          source: "vk-track",
-          trackId: loadedVideo.selectedTrackId,
-          cues,
+        loadedVideo = await invoke<LoadedVideo>("load_video_from_url", {
+          url: trimmedUrl,
         });
       } catch (loadError) {
-        setError(mapLoadError(loadError));
+        if (requestIdRef.current === requestId) {
+          setError(mapLoadError(loadError));
+        }
+        return;
       } finally {
-        setIsLoading(false);
+        if (requestIdRef.current === requestId) {
+          setIsLoading(false);
+        }
       }
+
+      if (requestIdRef.current !== requestId) {
+        return;
+      }
+
+      let cues: SubtitleLane["cues"];
+
+      try {
+        cues = parseWebVtt(loadedVideo.subtitleText);
+      } catch {
+        setError(SUBTITLE_PARSE_ERROR);
+        return;
+      }
+
+      if (cues.length === 0) {
+        setError(SUBTITLE_PARSE_ERROR);
+        return;
+      }
+
+      setVideo(loadedVideo);
+      setLane({
+        role: "primary",
+        source: "vk-track",
+        trackId: loadedVideo.selectedTrackId,
+        cues,
+      });
     },
-    [url],
+    [isLoading, url],
   );
 
   return (
@@ -72,6 +100,7 @@ export default function App() {
           aria-label="VK Video URL"
           placeholder="https://vkvideo.ru/video-..."
           value={url}
+          disabled={isLoading}
           onChange={(event) => setUrl(event.target.value)}
         />
         <Button type="submit" disabled={isLoading}>
