@@ -110,6 +110,35 @@ struct DictionaryClientConfig {
     allowed_hosts: Vec<String>,
     #[cfg(test)]
     allow_insecure_localhost: bool,
+    #[cfg(test)]
+    mock_client: Option<std::sync::Arc<MockDictionaryClient>>,
+}
+
+#[cfg(test)]
+#[derive(Debug)]
+struct MockDictionaryClient {
+    response: MockDictionaryResponse,
+    request_count: std::sync::atomic::AtomicUsize,
+}
+
+#[cfg(test)]
+impl MockDictionaryClient {
+    fn fetch(&self) -> MockDictionaryResponse {
+        self.request_count
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.response.clone()
+    }
+
+    fn request_count(&self) -> usize {
+        self.request_count.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone)]
+struct MockDictionaryResponse {
+    status: reqwest::StatusCode,
+    body: Vec<u8>,
 }
 
 impl Default for DictionaryClientConfig {
@@ -120,6 +149,8 @@ impl Default for DictionaryClientConfig {
             allowed_hosts: vec![ALLOWED_DICTIONARY_HOST.to_string()],
             #[cfg(test)]
             allow_insecure_localhost: false,
+            #[cfg(test)]
+            mock_client: None,
         }
     }
 }
@@ -131,6 +162,7 @@ impl DictionaryClientConfig {
             endpoint_base: Url::parse(endpoint_base).expect("test endpoint must be a valid URL"),
             allowed_hosts: vec![ALLOWED_DICTIONARY_HOST.to_string()],
             allow_insecure_localhost: false,
+            mock_client: None,
         }
     }
 
@@ -143,6 +175,7 @@ impl DictionaryClientConfig {
                 .map(|host| normalize_host(host))
                 .collect(),
             allow_insecure_localhost: false,
+            mock_client: None,
         }
     }
 
@@ -152,7 +185,33 @@ impl DictionaryClientConfig {
             endpoint_base: Url::parse(endpoint_base).expect("test endpoint must be a valid URL"),
             allowed_hosts: vec!["localhost".to_string(), "127.0.0.1".to_string()],
             allow_insecure_localhost: true,
+            mock_client: None,
         }
+    }
+
+    #[cfg(test)]
+    fn for_tests_with_mock_response(
+        status: reqwest::StatusCode,
+        body: &'static str,
+    ) -> (Self, std::sync::Arc<MockDictionaryClient>) {
+        let mock_client = std::sync::Arc::new(MockDictionaryClient {
+            response: MockDictionaryResponse {
+                status,
+                body: body.as_bytes().to_vec(),
+            },
+            request_count: std::sync::atomic::AtomicUsize::new(0),
+        });
+
+        (
+            Self {
+                endpoint_base: Url::parse("https://kaikki.org/ruwiktionary/")
+                    .expect("test endpoint must be a valid URL"),
+                allowed_hosts: vec![ALLOWED_DICTIONARY_HOST.to_string()],
+                allow_insecure_localhost: false,
+                mock_client: Some(std::sync::Arc::clone(&mock_client)),
+            },
+            mock_client,
+        )
     }
 }
 
@@ -218,6 +277,12 @@ async fn fetch_lookup(
     language: SupportedLookupLanguage,
     query: &str,
 ) -> Result<WordLookup, WordLookupError> {
+    #[cfg(test)]
+    if let Some(mock_client) = &config.mock_client {
+        let response = mock_client.fetch();
+        return handle_provider_response(language, query, response.status, response.body);
+    }
+
     let client = build_dictionary_client()?;
     let url = build_lookup_url(config, language, query)?;
     let response = client
@@ -235,7 +300,25 @@ async fn fetch_lookup(
         return Err(WordLookupError::DictionaryUnavailable);
     }
 
+    let status = response.status();
     let bytes = read_limited_dictionary_bytes(response).await?;
+    handle_provider_response(language, query, status, bytes)
+}
+
+fn handle_provider_response(
+    language: SupportedLookupLanguage,
+    query: &str,
+    status: reqwest::StatusCode,
+    bytes: Vec<u8>,
+) -> Result<WordLookup, WordLookupError> {
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Err(WordLookupError::NotFound);
+    }
+
+    if !status.is_success() {
+        return Err(WordLookupError::DictionaryUnavailable);
+    }
+
     parse_provider_response(language, query, &bytes)
 }
 
@@ -710,7 +793,6 @@ fn push_unique(values: &mut Vec<String>, value: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -908,9 +990,7 @@ mod tests {
         let state = DictionaryState::default();
         let config = DictionaryClientConfig::for_tests("https://kaikki.org/ruwiktionary/");
 
-        let result = tauri::async_runtime::block_on(lookup_word_with_config(
-            &state, &config, "maison", "fr",
-        ));
+        let result = run_lookup(&state, &config, "maison", "fr");
 
         assert!(matches!(result, Err(WordLookupError::UnsupportedLanguage)));
         let serialized = String::from(WordLookupError::UnsupportedLanguage);
@@ -920,85 +1000,106 @@ mod tests {
     #[test]
     fn successful_lookup_cache_prevents_repeated_provider_requests() {
         let body = r#"{"word":"house","pos":"noun","lang_code":"en","lang":"Английский","senses":[{"glosses":["дом"]}]}"#;
-        let server = TestDictionaryServer::new(200, body);
-        let config =
-            DictionaryClientConfig::for_tests_with_insecure_localhost(&server.endpoint_base());
+        let (config, provider) =
+            DictionaryClientConfig::for_tests_with_mock_response(reqwest::StatusCode::OK, body);
         let state = DictionaryState::default();
 
-        let first =
-            tauri::async_runtime::block_on(lookup_word_with_config(&state, &config, "house", "en"))
-                .unwrap();
-        let second =
-            tauri::async_runtime::block_on(lookup_word_with_config(&state, &config, "house", "en"))
-                .unwrap();
+        let first = run_lookup(&state, &config, "house", "en").unwrap_or_else(|error| {
+            panic!(
+                "first lookup returned {error:?}; request_count={}",
+                provider.request_count()
+            )
+        });
+        let second = run_lookup(&state, &config, "house", "en").unwrap();
 
         assert_eq!(first.meanings, vec!["дом"]);
         assert_eq!(second.meanings, vec!["дом"]);
-        assert_eq!(server.request_count(), 1);
+        assert_eq!(provider.request_count(), 1);
     }
 
     #[test]
     fn not_found_lookup_cache_prevents_repeated_provider_requests() {
-        let server = TestDictionaryServer::new(404, "");
-        let config =
-            DictionaryClientConfig::for_tests_with_insecure_localhost(&server.endpoint_base());
+        let (config, provider) = DictionaryClientConfig::for_tests_with_mock_response(
+            reqwest::StatusCode::NOT_FOUND,
+            "",
+        );
         let state = DictionaryState::default();
 
-        let first = tauri::async_runtime::block_on(lookup_word_with_config(
-            &state, &config, "missing", "en",
-        ));
-        let second = tauri::async_runtime::block_on(lookup_word_with_config(
-            &state, &config, "missing", "en",
-        ));
+        let first = run_lookup(&state, &config, "missing", "en");
+        let second = run_lookup(&state, &config, "missing", "en");
 
-        assert!(matches!(first, Err(WordLookupError::NotFound)));
-        assert!(matches!(second, Err(WordLookupError::NotFound)));
-        assert_eq!(server.request_count(), 1);
+        assert!(
+            matches!(first, Err(WordLookupError::NotFound)),
+            "first lookup returned {first:?}; request_count={}",
+            provider.request_count()
+        );
+        assert!(
+            matches!(second, Err(WordLookupError::NotFound)),
+            "second lookup returned {second:?}; request_count={}",
+            provider.request_count()
+        );
+        assert_eq!(provider.request_count(), 1);
     }
 
     #[test]
     fn maps_provider_404_to_not_found() {
-        let server = TestDictionaryServer::new(404, "");
-        let config =
-            DictionaryClientConfig::for_tests_with_insecure_localhost(&server.endpoint_base());
+        let (config, provider) = DictionaryClientConfig::for_tests_with_mock_response(
+            reqwest::StatusCode::NOT_FOUND,
+            "",
+        );
         let state = DictionaryState::default();
 
-        let result = tauri::async_runtime::block_on(lookup_word_with_config(
-            &state, &config, "missing", "en",
-        ));
+        let result = run_lookup(&state, &config, "missing", "en");
 
-        assert!(matches!(result, Err(WordLookupError::NotFound)));
+        assert!(
+            matches!(result, Err(WordLookupError::NotFound)),
+            "lookup returned {result:?}; request_count={}",
+            provider.request_count()
+        );
     }
 
     #[test]
     fn maps_provider_non_success_status_to_dictionary_unavailable() {
-        let server = TestDictionaryServer::new(500, "");
-        let config =
-            DictionaryClientConfig::for_tests_with_insecure_localhost(&server.endpoint_base());
+        let (config, provider) = DictionaryClientConfig::for_tests_with_mock_response(
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            "",
+        );
         let state = DictionaryState::default();
 
-        let result =
-            tauri::async_runtime::block_on(lookup_word_with_config(&state, &config, "house", "en"));
+        let result = run_lookup(&state, &config, "house", "en");
 
         assert!(matches!(
             result,
             Err(WordLookupError::DictionaryUnavailable)
         ));
+        assert_eq!(provider.request_count(), 1);
     }
 
     #[test]
     fn maps_network_send_failure_to_dictionary_unavailable() {
-        let endpoint_base = unused_localhost_endpoint_base();
-        let config = DictionaryClientConfig::for_tests_with_insecure_localhost(&endpoint_base);
+        let server = TestDictionaryServer::disconnecting();
+        let config =
+            DictionaryClientConfig::for_tests_with_insecure_localhost(&server.endpoint_base());
         let state = DictionaryState::default();
 
-        let result =
-            tauri::async_runtime::block_on(lookup_word_with_config(&state, &config, "house", "en"));
+        let result = run_lookup(&state, &config, "house", "en");
 
         assert!(matches!(
             result,
             Err(WordLookupError::DictionaryUnavailable)
         ));
+        assert_eq!(server.request_count(), 1);
+    }
+
+    fn run_lookup(
+        state: &DictionaryState,
+        config: &DictionaryClientConfig,
+        word: &str,
+        track_lang: &str,
+    ) -> Result<WordLookup, WordLookupError> {
+        tauri::async_runtime::TokioRuntime::new()
+            .unwrap()
+            .block_on(lookup_word_with_config(state, config, word, track_lang))
     }
 
     struct TestDictionaryServer {
@@ -1009,7 +1110,7 @@ mod tests {
     }
 
     impl TestDictionaryServer {
-        fn new(status_code: u16, body: &'static str) -> Self {
+        fn disconnecting() -> Self {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let port = listener.local_addr().unwrap().port();
             listener.set_nonblocking(true).unwrap();
@@ -1021,9 +1122,8 @@ mod tests {
             let handle = thread::spawn(move || {
                 while !thread_stop.load(Ordering::SeqCst) {
                     match listener.accept() {
-                        Ok((mut stream, _)) => {
+                        Ok((_stream, _)) => {
                             thread_request_count.fetch_add(1, Ordering::SeqCst);
-                            write_response(&mut stream, status_code, body);
                         }
                         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                             thread::sleep(StdDuration::from_millis(5));
@@ -1058,29 +1158,5 @@ mod tests {
                 handle.join().unwrap();
             }
         }
-    }
-
-    fn write_response(stream: &mut TcpStream, status_code: u16, body: &str) {
-        let _ = stream.set_read_timeout(Some(StdDuration::from_millis(100)));
-        let mut request_buffer = [0; 1024];
-        let _ = stream.read(&mut request_buffer);
-        let reason = match status_code {
-            200 => "OK",
-            404 => "Not Found",
-            500 => "Internal Server Error",
-            _ => "Test Status",
-        };
-        let response = format!(
-            "HTTP/1.1 {status_code} {reason}\r\nContent-Type: application/jsonl; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.as_bytes().len()
-        );
-        stream.write_all(response.as_bytes()).unwrap();
-    }
-
-    fn unused_localhost_endpoint_base() -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        drop(listener);
-        format!("http://localhost:{port}/ruwiktionary/")
     }
 }
