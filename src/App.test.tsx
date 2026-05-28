@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { WordLookup } from "@/lib/dictionary/types";
 import type { LoadedVideo } from "@/lib/subtitles/types";
 
 import App from "./App";
@@ -67,13 +68,29 @@ function loadedVideo(overrides: Partial<LoadedVideo> = {}): LoadedVideo {
     },
     embedUrl: "https://vk.com/video_ext.php?oid=-1&id=2&hash=abc",
     tracks: [],
-    selectedTrackId: "track-1",
+    selectedTrackId: "",
     subtitleText: [
       "WEBVTT",
       "",
       "00:00:00.000 --> 00:00:01.000",
       "Hello from VK",
     ].join("\n"),
+    ...overrides,
+  };
+}
+
+function wordLookup(overrides: Partial<WordLookup> = {}): WordLookup {
+  return {
+    query: "Hallo",
+    headword: "hallo",
+    language: "de",
+    languageName: "Немецкий",
+    ipa: null,
+    partOfSpeech: null,
+    grammar: [],
+    meanings: ["привет"],
+    source: "ruwiktionary-kaikki",
+    sourceUrl: null,
     ...overrides,
   };
 }
@@ -477,7 +494,7 @@ describe("App", () => {
 
   it("looks up German words and renders Russian dictionary details", async () => {
     const user = userEvent.setup();
-    let resolveLookup: (lookup: unknown) => void = () => {};
+    let resolveLookup: (lookup: WordLookup) => void = () => {};
 
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "load_video_from_url") {
@@ -514,18 +531,14 @@ describe("App", () => {
     });
 
     await act(async () => {
-      resolveLookup({
+      resolveLookup(wordLookup({
         query: "Hallo",
         headword: "hallo",
-        language: "de",
-        languageName: "Немецкий",
         ipa: "haˈloː",
         partOfSpeech: "междометие",
         grammar: ["приветствие"],
-        meanings: ["привет"],
-        source: "ruwiktionary-kaikki",
         sourceUrl: "https://kaikki.org/ruwiktionary/Немецкий/meaning/h/ha/hallo.html",
-      });
+      }));
     });
 
     expect(await screen.findByText("Значение")).toBeInTheDocument();
@@ -547,7 +560,7 @@ describe("App", () => {
       }
 
       if (command === "lookup_word") {
-        return Promise.resolve({
+        return Promise.resolve(wordLookup({
           query: "house",
           headword: "house",
           language: "en",
@@ -555,8 +568,7 @@ describe("App", () => {
           partOfSpeech: "существительное",
           grammar: ["единственное число"],
           meanings: ["дом (сооружение)"],
-          source: "ruwiktionary-kaikki",
-        });
+        }));
       }
 
       return Promise.reject(new Error(`unexpected command: ${command}`));
@@ -591,7 +603,7 @@ describe("App", () => {
       }
 
       if (command === "lookup_word") {
-        return Promise.resolve({
+        return Promise.resolve(wordLookup({
           query: "дом",
           headword: "дом",
           language: "ru",
@@ -600,8 +612,7 @@ describe("App", () => {
           partOfSpeech: "существительное",
           grammar: ["мужской род"],
           meanings: ["архитектурное сооружение, предназначенное для жилья"],
-          source: "ruwiktionary-kaikki",
-        });
+        }));
       }
 
       return Promise.reject(new Error(`unexpected command: ${command}`));
@@ -700,8 +711,8 @@ describe("App", () => {
 
   it("ignores stale dictionary lookup responses after another word is inspected", async () => {
     const user = userEvent.setup();
-    let resolveHalloLookup: (lookup: unknown) => void = () => {};
-    let resolveWeltLookup: (lookup: unknown) => void = () => {};
+    let resolveHalloLookup: (lookup: WordLookup) => void = () => {};
+    let resolveWeltLookup: (lookup: WordLookup) => void = () => {};
 
     mocks.invoke.mockImplementation((command: string, args?: { word?: string }) => {
       if (command === "load_video_from_url") {
@@ -738,31 +749,22 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Welt" }));
 
     await act(async () => {
-      resolveWeltLookup({
+      resolveWeltLookup(wordLookup({
         query: "Welt",
         headword: "Welt",
-        language: "de",
-        languageName: "Немецкий",
         partOfSpeech: "существительное",
-        grammar: [],
         meanings: ["мир"],
-        source: "ruwiktionary-kaikki",
-      });
+      }));
     });
 
     expect(await screen.findByText("мир")).toBeInTheDocument();
 
     await act(async () => {
-      resolveHalloLookup({
+      resolveHalloLookup(wordLookup({
         query: "Hallo",
         headword: "Hallo",
-        language: "de",
-        languageName: "Немецкий",
         partOfSpeech: "междометие",
-        grammar: [],
-        meanings: ["привет"],
-        source: "ruwiktionary-kaikki",
-      });
+      }));
     });
 
     expect(screen.getByText("мир")).toBeInTheDocument();
@@ -771,7 +773,7 @@ describe("App", () => {
 
   it("holds and releases a German cue while dictionary lookup is active", async () => {
     const user = userEvent.setup();
-    let resolveLookup: (lookup: unknown) => void = () => {};
+    let resolveLookup: (lookup: WordLookup) => void = () => {};
 
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "load_video_from_url") {
@@ -833,15 +835,11 @@ describe("App", () => {
     expect(screen.queryByLabelText("Word details: Hallo")).not.toBeInTheDocument();
 
     await act(async () => {
-      resolveLookup({
+      resolveLookup(wordLookup({
         query: "Hallo",
         headword: "hallo",
-        language: "de",
-        languageName: "Немецкий",
         grammar: ["приветствие"],
-        meanings: ["привет"],
-        source: "ruwiktionary-kaikki",
-      });
+      }));
     });
 
     expect(screen.queryByText("привет")).not.toBeInTheDocument();
