@@ -42,7 +42,7 @@ export function WordLookupPopover({ fallbackWord, lookup }: WordLookupPopoverPro
     return (
       <div className={contentClassName}>
         <PopoverWordHeader word={fallbackWord} />
-        <div className="text-sm text-slate-300">Слово не найдено в немецком словаре</div>
+        <div className="text-sm text-slate-300">Слово не найдено в словаре</div>
       </div>
     );
   }
@@ -88,7 +88,7 @@ export function WordLookupPopover({ fallbackWord, lookup }: WordLookupPopoverPro
         </div>
       </Section>
 
-      <Section label="Грамматика">{grammarText}</Section>
+      {grammarText ? <Section label="Грамматика">{grammarText}</Section> : null}
     </div>
   );
 }
