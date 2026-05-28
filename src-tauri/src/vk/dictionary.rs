@@ -5,17 +5,46 @@ use std::sync::Mutex;
 use std::time::Duration;
 use url::{Host, Url};
 
-const DEFAULT_LOOKUP_BASE: &str = "https://api.wiktapi.dev/v1/ru/word/";
-const ALLOWED_DICTIONARY_HOST: &str = "api.wiktapi.dev";
+const DEFAULT_LOOKUP_BASE: &str = "https://kaikki.org/ruwiktionary/";
+const ALLOWED_DICTIONARY_HOST: &str = "kaikki.org";
+const SOURCE_NAME: &str = "ruwiktionary-kaikki";
 const USER_AGENT_VALUE: &str = "vk-video-wrapper/0.1 dictionary-lookup";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_DICTIONARY_BYTES: usize = 512 * 1024;
+const MEANING_LIMIT: usize = 6;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SupportedLookupLanguage {
+    German,
+    English,
+    Russian,
+}
+
+impl SupportedLookupLanguage {
+    fn code(self) -> &'static str {
+        match self {
+            SupportedLookupLanguage::German => "de",
+            SupportedLookupLanguage::English => "en",
+            SupportedLookupLanguage::Russian => "ru",
+        }
+    }
+
+    fn language_name(self) -> &'static str {
+        match self {
+            SupportedLookupLanguage::German => "Немецкий",
+            SupportedLookupLanguage::English => "Английский",
+            SupportedLookupLanguage::Russian => "Русский",
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GermanWordLookup {
+pub struct WordLookup {
     pub query: String,
     pub headword: String,
+    pub language: String,
+    pub language_name: String,
     pub ipa: Option<String>,
     pub part_of_speech: Option<String>,
     pub grammar: Vec<String>,
@@ -26,16 +55,16 @@ pub struct GermanWordLookup {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CacheEntry {
-    Found(GermanWordLookup),
+    Found(WordLookup),
     NotFound,
 }
 
 #[derive(Default)]
-pub struct GermanDictionaryState {
+pub struct DictionaryState {
     cache: Mutex<HashMap<String, CacheEntry>>,
 }
 
-impl GermanDictionaryState {
+impl DictionaryState {
     fn cached(&self, key: &str) -> Option<CacheEntry> {
         self.cache.lock().ok()?.get(key).cloned()
     }
@@ -48,24 +77,24 @@ impl GermanDictionaryState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum GermanWordLookupError {
+enum WordLookupError {
     UnsupportedLanguage,
     NotFound,
     DictionaryUnavailable,
 }
 
-impl GermanWordLookupError {
+impl WordLookupError {
     fn kind(self) -> &'static str {
         match self {
-            GermanWordLookupError::UnsupportedLanguage => "unsupported-language",
-            GermanWordLookupError::NotFound => "not-found",
-            GermanWordLookupError::DictionaryUnavailable => "dictionary-unavailable",
+            WordLookupError::UnsupportedLanguage => "unsupported-language",
+            WordLookupError::NotFound => "not-found",
+            WordLookupError::DictionaryUnavailable => "dictionary-unavailable",
         }
     }
 }
 
-impl From<GermanWordLookupError> for String {
-    fn from(value: GermanWordLookupError) -> Self {
+impl From<WordLookupError> for String {
+    fn from(value: WordLookupError) -> Self {
         let message = value.kind();
         serde_json::json!({
             "kind": message,
@@ -113,15 +142,15 @@ impl DictionaryClientConfig {
 }
 
 #[tauri::command]
-pub async fn lookup_german_word(
-    state: tauri::State<'_, GermanDictionaryState>,
+pub async fn lookup_word(
+    state: tauri::State<'_, DictionaryState>,
     word: String,
     cue_text: String,
     track_lang: String,
-) -> Result<GermanWordLookup, String> {
+) -> Result<WordLookup, String> {
     let _cue_text = cue_text;
 
-    lookup_german_word_with_config(
+    lookup_word_with_config(
         &state,
         &DictionaryClientConfig::default(),
         &word,
@@ -131,90 +160,121 @@ pub async fn lookup_german_word(
     .map_err(String::from)
 }
 
-async fn lookup_german_word_with_config(
-    state: &GermanDictionaryState,
+async fn lookup_word_with_config(
+    state: &DictionaryState,
     config: &DictionaryClientConfig,
     word: &str,
     track_lang: &str,
-) -> Result<GermanWordLookup, GermanWordLookupError> {
-    if !is_supported_german_language(track_lang) {
-        return Err(GermanWordLookupError::UnsupportedLanguage);
-    }
-
-    let normalized = normalize_german_word(word).ok_or(GermanWordLookupError::NotFound)?;
-    let cache_key = format!("de:{}", normalized.to_lowercase());
+) -> Result<WordLookup, WordLookupError> {
+    let language =
+        normalize_supported_language(track_lang).ok_or(WordLookupError::UnsupportedLanguage)?;
+    let normalized = normalize_lookup_word(word).ok_or(WordLookupError::NotFound)?;
+    let cache_key = cache_key(language, &normalized);
 
     match state.cached(&cache_key) {
         Some(CacheEntry::Found(lookup)) => return Ok(lookup),
-        Some(CacheEntry::NotFound) => return Err(GermanWordLookupError::NotFound),
+        Some(CacheEntry::NotFound) => return Err(WordLookupError::NotFound),
         None => {}
     }
 
-    match fetch_lookup(config, &normalized).await {
-        Ok(lookup) => {
-            state.store_cache(&cache_key, CacheEntry::Found(lookup.clone()));
-            Ok(lookup)
-        }
-        Err(GermanWordLookupError::NotFound) => {
-            state.store_cache(&cache_key, CacheEntry::NotFound);
-            Err(GermanWordLookupError::NotFound)
-        }
-        Err(error) => Err(error),
+    let lowercase = normalized.to_lowercase();
+    let mut attempts = vec![normalized.as_str()];
+    if normalized != lowercase {
+        attempts.push(lowercase.as_str());
     }
+
+    for attempt in attempts {
+        match fetch_lookup(config, language, attempt).await {
+            Ok(lookup) => {
+                state.store_cache(&cache_key, CacheEntry::Found(lookup.clone()));
+                return Ok(lookup);
+            }
+            Err(WordLookupError::NotFound) => {}
+            Err(error) => return Err(error),
+        }
+    }
+
+    state.store_cache(&cache_key, CacheEntry::NotFound);
+    Err(WordLookupError::NotFound)
 }
 
 async fn fetch_lookup(
     config: &DictionaryClientConfig,
+    language: SupportedLookupLanguage,
     query: &str,
-) -> Result<GermanWordLookup, GermanWordLookupError> {
+) -> Result<WordLookup, WordLookupError> {
     let client = build_dictionary_client()?;
-    let url = build_lookup_url(config, query)?;
+    let url = build_lookup_url(config, language, query)?;
     let response = client
         .get(url)
         .header(reqwest::header::USER_AGENT, USER_AGENT_VALUE)
         .send()
         .await
-        .map_err(|_| GermanWordLookupError::DictionaryUnavailable)?;
+        .map_err(|_| WordLookupError::DictionaryUnavailable)?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(GermanWordLookupError::NotFound);
+        return Err(WordLookupError::NotFound);
     }
 
     if !response.status().is_success() {
-        return Err(GermanWordLookupError::DictionaryUnavailable);
+        return Err(WordLookupError::DictionaryUnavailable);
     }
 
     let bytes = read_limited_dictionary_bytes(response).await?;
-    parse_provider_response(query, &bytes)
+    parse_provider_response(language, query, &bytes)
 }
 
-fn build_dictionary_client() -> Result<reqwest::Client, GermanWordLookupError> {
+fn build_dictionary_client() -> Result<reqwest::Client, WordLookupError> {
     reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
         .build()
-        .map_err(|_| GermanWordLookupError::DictionaryUnavailable)
+        .map_err(|_| WordLookupError::DictionaryUnavailable)
 }
 
 fn build_lookup_url(
     config: &DictionaryClientConfig,
+    language: SupportedLookupLanguage,
     word: &str,
-) -> Result<Url, GermanWordLookupError> {
+) -> Result<Url, WordLookupError> {
     if !is_allowed_dictionary_url(config, &config.endpoint_base) {
-        return Err(GermanWordLookupError::DictionaryUnavailable);
+        return Err(WordLookupError::DictionaryUnavailable);
     }
 
-    let mut url = config.endpoint_base.clone();
+    build_entry_url(&config.endpoint_base, language, word, "jsonl")
+}
+
+fn build_entry_url(
+    endpoint_base: &Url,
+    language: SupportedLookupLanguage,
+    word: &str,
+    extension: &str,
+) -> Result<Url, WordLookupError> {
+    let first = prefix_chars(word, 1).ok_or(WordLookupError::NotFound)?;
+    let first_two = prefix_chars(word, 2).ok_or(WordLookupError::NotFound)?;
+    let mut url = endpoint_base.clone();
     {
         let mut path = url
             .path_segments_mut()
-            .map_err(|_| GermanWordLookupError::DictionaryUnavailable)?;
+            .map_err(|_| WordLookupError::DictionaryUnavailable)?;
         path.pop_if_empty();
-        path.push(word);
+        path.push(language.language_name());
+        path.push("meaning");
+        path.push(&first);
+        path.push(&first_two);
+        path.push(&format!("{word}.{extension}"));
     }
-    url.query_pairs_mut().clear().append_pair("lang", "de");
-
+    url.set_query(None);
     Ok(url)
+}
+
+fn prefix_chars(word: &str, count: usize) -> Option<String> {
+    let prefix: String = word.chars().take(count).collect();
+    if prefix.is_empty() {
+        None
+    } else {
+        Some(prefix)
+    }
 }
 
 fn is_allowed_dictionary_url(config: &DictionaryClientConfig, url: &Url) -> bool {
@@ -234,13 +294,13 @@ fn normalize_host(host: &str) -> String {
 
 async fn read_limited_dictionary_bytes(
     mut response: reqwest::Response,
-) -> Result<Vec<u8>, GermanWordLookupError> {
+) -> Result<Vec<u8>, WordLookupError> {
     let mut bytes = Vec::new();
 
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|_| GermanWordLookupError::DictionaryUnavailable)?
+        .map_err(|_| WordLookupError::DictionaryUnavailable)?
     {
         append_dictionary_chunk(&mut bytes, &chunk)?;
     }
@@ -248,20 +308,20 @@ async fn read_limited_dictionary_bytes(
     Ok(bytes)
 }
 
-fn append_dictionary_chunk(bytes: &mut Vec<u8>, chunk: &[u8]) -> Result<(), GermanWordLookupError> {
+fn append_dictionary_chunk(bytes: &mut Vec<u8>, chunk: &[u8]) -> Result<(), WordLookupError> {
     let next_len = bytes
         .len()
         .checked_add(chunk.len())
-        .ok_or(GermanWordLookupError::DictionaryUnavailable)?;
+        .ok_or(WordLookupError::DictionaryUnavailable)?;
     if next_len > MAX_DICTIONARY_BYTES {
-        return Err(GermanWordLookupError::DictionaryUnavailable);
+        return Err(WordLookupError::DictionaryUnavailable);
     }
 
     bytes.extend_from_slice(chunk);
     Ok(())
 }
 
-fn normalize_german_word(word: &str) -> Option<String> {
+fn normalize_lookup_word(word: &str) -> Option<String> {
     let normalized = word
         .trim()
         .trim_matches(|character: char| !character.is_alphabetic());
@@ -273,88 +333,177 @@ fn normalize_german_word(word: &str) -> Option<String> {
     }
 }
 
-fn is_supported_german_language(lang: &str) -> bool {
+fn normalize_supported_language(lang: &str) -> Option<SupportedLookupLanguage> {
     let normalized = lang.trim().to_ascii_lowercase();
-    normalized == "de" || normalized.starts_with("de-")
+
+    if normalized == "de" || normalized.starts_with("de-") {
+        Some(SupportedLookupLanguage::German)
+    } else if normalized == "en" || normalized.starts_with("en-") {
+        Some(SupportedLookupLanguage::English)
+    } else if normalized == "ru" || normalized.starts_with("ru-") {
+        Some(SupportedLookupLanguage::Russian)
+    } else {
+        None
+    }
 }
 
 fn parse_provider_response(
+    language: SupportedLookupLanguage,
     query: &str,
     bytes: &[u8],
-) -> Result<GermanWordLookup, GermanWordLookupError> {
+) -> Result<WordLookup, WordLookupError> {
     if bytes.len() > MAX_DICTIONARY_BYTES {
-        return Err(GermanWordLookupError::DictionaryUnavailable);
+        return Err(WordLookupError::DictionaryUnavailable);
     }
 
-    let value: Value =
-        serde_json::from_slice(bytes).map_err(|_| GermanWordLookupError::DictionaryUnavailable)?;
+    let body = std::str::from_utf8(bytes).map_err(|_| WordLookupError::DictionaryUnavailable)?;
+    let mut builder = LookupBuilder::new(language, query);
+    let mut saw_line = false;
+    let mut saw_matching_entry = false;
+    let mut saw_matching_entry_without_glosses = false;
 
-    find_provider_entry(query, &value)
-}
+    for line in body.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        saw_line = true;
+        let value: Value =
+            serde_json::from_str(line).map_err(|_| WordLookupError::DictionaryUnavailable)?;
 
-fn find_provider_entry(
-    query: &str,
-    value: &Value,
-) -> Result<GermanWordLookup, GermanWordLookupError> {
-    match value {
-        Value::Array(entries) => find_provider_entry_in_entries(query, entries),
-        Value::Object(object) => match object.get("entries") {
-            Some(Value::Array(entries)) => find_provider_entry_in_entries(query, entries),
-            Some(_) => Err(GermanWordLookupError::DictionaryUnavailable),
-            None => match parse_entry(query, value) {
-                ParsedEntry::Found(lookup) => Ok(lookup),
-                ParsedEntry::NoUsableGlosses => Err(GermanWordLookupError::NotFound),
-                ParsedEntry::ContractDrift => Err(GermanWordLookupError::DictionaryUnavailable),
-            },
-        },
-        _ => Err(GermanWordLookupError::DictionaryUnavailable),
-    }
-}
-
-fn find_provider_entry_in_entries(
-    query: &str,
-    entries: &[Value],
-) -> Result<GermanWordLookup, GermanWordLookupError> {
-    let mut saw_no_usable_glosses = false;
-    let mut saw_contract_drift = false;
-
-    for entry in entries {
-        match parse_entry(query, entry) {
-            ParsedEntry::Found(lookup) => return Ok(lookup),
-            ParsedEntry::NoUsableGlosses => saw_no_usable_glosses = true,
-            ParsedEntry::ContractDrift => saw_contract_drift = true,
+        match parse_entry(language, query, &value) {
+            ParsedEntry::Found(entry) => {
+                saw_matching_entry = true;
+                builder.push_entry(entry);
+                if builder.meanings.len() >= MEANING_LIMIT {
+                    break;
+                }
+            }
+            ParsedEntry::NoUsableGlosses => {
+                saw_matching_entry = true;
+                saw_matching_entry_without_glosses = true;
+            }
+            ParsedEntry::WrongLanguage => {}
+            ParsedEntry::ContractDrift => return Err(WordLookupError::DictionaryUnavailable),
         }
     }
 
-    if saw_contract_drift {
-        Err(GermanWordLookupError::DictionaryUnavailable)
-    } else if saw_no_usable_glosses || entries.is_empty() {
-        Err(GermanWordLookupError::NotFound)
+    if !saw_line {
+        return Err(WordLookupError::NotFound);
+    }
+
+    if builder.has_meanings() {
+        Ok(builder.finish())
+    } else if saw_matching_entry || saw_matching_entry_without_glosses {
+        Err(WordLookupError::NotFound)
     } else {
-        Err(GermanWordLookupError::DictionaryUnavailable)
+        Err(WordLookupError::NotFound)
+    }
+}
+
+struct LookupBuilder {
+    query: String,
+    language: SupportedLookupLanguage,
+    headword: Option<String>,
+    ipa: Option<String>,
+    part_of_speech: Option<String>,
+    grammar: Vec<String>,
+    meanings: Vec<String>,
+}
+
+impl LookupBuilder {
+    fn new(language: SupportedLookupLanguage, query: &str) -> Self {
+        Self {
+            query: query.to_string(),
+            language,
+            headword: None,
+            ipa: None,
+            part_of_speech: None,
+            grammar: Vec::new(),
+            meanings: Vec::new(),
+        }
+    }
+
+    fn push_entry(&mut self, entry: ParsedEntryData) {
+        if self.headword.is_none() {
+            self.headword = Some(entry.headword);
+        }
+        if self.ipa.is_none() {
+            self.ipa = entry.ipa;
+        }
+        if self.part_of_speech.is_none() {
+            self.part_of_speech = entry.part_of_speech;
+        }
+
+        for item in entry.grammar {
+            push_unique(&mut self.grammar, item);
+        }
+        for meaning in entry.meanings {
+            if self.meanings.len() >= MEANING_LIMIT {
+                break;
+            }
+            push_unique(&mut self.meanings, meaning);
+        }
+    }
+
+    fn has_meanings(&self) -> bool {
+        !self.meanings.is_empty()
+    }
+
+    fn finish(self) -> WordLookup {
+        let headword = self.headword.unwrap_or_else(|| self.query.clone());
+        WordLookup {
+            query: self.query,
+            headword: headword.clone(),
+            language: self.language.code().to_string(),
+            language_name: self.language.language_name().to_string(),
+            ipa: self.ipa,
+            part_of_speech: self.part_of_speech,
+            grammar: self.grammar,
+            meanings: self.meanings,
+            source: SOURCE_NAME.to_string(),
+            source_url: build_source_url(self.language, &headword),
+        }
     }
 }
 
 enum ParsedEntry {
-    Found(GermanWordLookup),
+    Found(ParsedEntryData),
     NoUsableGlosses,
+    WrongLanguage,
     ContractDrift,
 }
 
-fn parse_entry(query: &str, entry: &Value) -> ParsedEntry {
+struct ParsedEntryData {
+    headword: String,
+    ipa: Option<String>,
+    part_of_speech: Option<String>,
+    grammar: Vec<String>,
+    meanings: Vec<String>,
+}
+
+fn parse_entry(language: SupportedLookupLanguage, query: &str, entry: &Value) -> ParsedEntry {
     let Some(object) = entry.as_object() else {
+        return ParsedEntry::ContractDrift;
+    };
+    let Some(lang_code) = object.get("lang_code").and_then(Value::as_str) else {
         return ParsedEntry::ContractDrift;
     };
     let Some(senses) = object.get("senses").and_then(Value::as_array) else {
         return ParsedEntry::ContractDrift;
     };
 
+    if lang_code != language.code() {
+        return ParsedEntry::WrongLanguage;
+    }
+
     let mut meanings = Vec::new();
     let mut grammar = Vec::new();
 
+    collect_tag_list(object.get("tags"), &mut grammar);
+    collect_raw_tag_list(object.get("raw_tags"), &mut grammar);
+    collect_form_grammar(object.get("forms"), &mut grammar);
+
     for sense in senses {
         collect_meanings(sense, &mut meanings);
-        collect_grammar(sense, &mut grammar);
+        collect_tag_list(sense.get("tags"), &mut grammar);
+        collect_raw_tag_list(sense.get("raw_tags"), &mut grammar);
     }
 
     if meanings.is_empty() {
@@ -375,15 +524,12 @@ fn parse_entry(query: &str, entry: &Value) -> ParsedEntry {
         .filter(|pos| !pos.is_empty())
         .map(map_part_of_speech);
 
-    ParsedEntry::Found(GermanWordLookup {
-        query: query.to_string(),
-        headword: headword.clone(),
+    ParsedEntry::Found(ParsedEntryData {
+        headword,
         ipa: extract_ipa(object.get("sounds")),
         part_of_speech,
         grammar,
         meanings,
-        source: "ruwiktionary".to_string(),
-        source_url: build_source_url(&headword),
     })
 }
 
@@ -393,6 +539,9 @@ fn collect_meanings(sense: &Value, meanings: &mut Vec<String>) {
     };
 
     for gloss in glosses {
+        if meanings.len() >= MEANING_LIMIT {
+            break;
+        }
         if let Some(gloss) = gloss
             .as_str()
             .map(str::trim)
@@ -403,8 +552,8 @@ fn collect_meanings(sense: &Value, meanings: &mut Vec<String>) {
     }
 }
 
-fn collect_grammar(sense: &Value, grammar: &mut Vec<String>) {
-    let Some(tags) = sense.get("tags").and_then(Value::as_array) else {
+fn collect_tag_list(tags: Option<&Value>, grammar: &mut Vec<String>) {
+    let Some(tags) = tags.and_then(Value::as_array) else {
         return;
     };
 
@@ -420,6 +569,29 @@ fn collect_grammar(sense: &Value, grammar: &mut Vec<String>) {
     }
 }
 
+fn collect_raw_tag_list(tags: Option<&Value>, grammar: &mut Vec<String>) {
+    let Some(tags) = tags.and_then(Value::as_array) else {
+        return;
+    };
+
+    for tag in tags {
+        if let Some(tag) = tag.as_str().map(str::trim).filter(|tag| !tag.is_empty()) {
+            push_unique(grammar, tag.to_string());
+        }
+    }
+}
+
+fn collect_form_grammar(forms: Option<&Value>, grammar: &mut Vec<String>) {
+    let Some(forms) = forms.and_then(Value::as_array) else {
+        return;
+    };
+
+    for form in forms {
+        collect_tag_list(form.get("tags"), grammar);
+        collect_raw_tag_list(form.get("raw_tags"), grammar);
+    }
+}
+
 fn extract_ipa(sounds: Option<&Value>) -> Option<String> {
     let sounds = sounds?.as_array()?;
 
@@ -428,9 +600,17 @@ fn extract_ipa(sounds: Option<&Value>) -> Option<String> {
             .get("ipa")
             .and_then(Value::as_str)
             .map(str::trim)
+            .map(trim_ipa_brackets)
             .filter(|ipa| !ipa.is_empty())
             .map(ToString::to_string)
     })
+}
+
+fn trim_ipa_brackets(ipa: &str) -> &str {
+    ipa.trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim()
 }
 
 fn map_part_of_speech(pos: &str) -> String {
@@ -461,9 +641,13 @@ fn map_grammar_tag(tag: &str) -> Option<&'static str> {
         "genitive" => Some("родительный падеж"),
         "dative" => Some("дательный падеж"),
         "accusative" => Some("винительный падеж"),
+        "instrumental" => Some("творительный падеж"),
+        "prepositional" => Some("предложный падеж"),
         "masculine" => Some("мужской род"),
         "feminine" => Some("женский род"),
         "neuter" => Some("средний род"),
+        "inanimate" => Some("неодушевлённое"),
+        "animate" => Some("одушевлённое"),
         "present" => Some("настоящее время"),
         "past" => Some("прошедшее время"),
         "comparative" => Some("сравнительная степень"),
@@ -472,14 +656,15 @@ fn map_grammar_tag(tag: &str) -> Option<&'static str> {
     }
 }
 
-fn build_source_url(headword: &str) -> Option<String> {
-    let mut url = Url::parse("https://ru.wiktionary.org/wiki/").ok()?;
-    {
-        let mut path = url.path_segments_mut().ok()?;
-        path.pop_if_empty();
-        path.push(headword);
-    }
-    Some(url.to_string())
+fn build_source_url(language: SupportedLookupLanguage, headword: &str) -> Option<String> {
+    let base = Url::parse(DEFAULT_LOOKUP_BASE).ok()?;
+    build_entry_url(&base, language, headword, "html")
+        .ok()
+        .map(|url| url.to_string())
+}
+
+fn cache_key(language: SupportedLookupLanguage, word: &str) -> String {
+    format!("{}:{}", language.code(), word.to_lowercase())
 }
 
 fn push_unique(values: &mut Vec<String>, value: String) {
@@ -493,119 +678,215 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalizes_clicked_german_words() {
+    fn normalizes_supported_lookup_languages() {
         assert_eq!(
-            normalize_german_word("„Häuser!“"),
-            Some("Häuser".to_string())
+            normalize_supported_language("de"),
+            Some(SupportedLookupLanguage::German)
         );
-        assert_eq!(normalize_german_word("  wir  "), Some("wir".to_string()));
-        assert_eq!(normalize_german_word("!!!"), None);
-    }
-
-    #[test]
-    fn detects_supported_german_track_languages() {
-        assert!(is_supported_german_language("de"));
-        assert!(is_supported_german_language(" de-DE "));
-        assert!(!is_supported_german_language("ru"));
-        assert!(!is_supported_german_language(""));
-    }
-
-    #[test]
-    fn builds_wiktapi_lookup_url() {
-        let config = DictionaryClientConfig::for_tests("https://api.wiktapi.dev/v1/ru/word/");
-        let url = build_lookup_url(&config, "Häuser").unwrap();
-
         assert_eq!(
-            url.as_str(),
-            "https://api.wiktapi.dev/v1/ru/word/H%C3%A4user?lang=de"
+            normalize_supported_language(" de-DE "),
+            Some(SupportedLookupLanguage::German)
+        );
+        assert_eq!(
+            normalize_supported_language("en-US"),
+            Some(SupportedLookupLanguage::English)
+        );
+        assert_eq!(
+            normalize_supported_language("ru-RU"),
+            Some(SupportedLookupLanguage::Russian)
+        );
+        assert_eq!(normalize_supported_language("fr"), None);
+        assert_eq!(normalize_supported_language(""), None);
+    }
+
+    #[test]
+    fn builds_kaikki_jsonl_urls_for_supported_languages() {
+        let config = DictionaryClientConfig::for_tests("https://kaikki.org/ruwiktionary/");
+        assert_eq!(
+            build_lookup_url(&config, SupportedLookupLanguage::German, "Haus")
+                .unwrap()
+                .as_str(),
+            "https://kaikki.org/ruwiktionary/%D0%9D%D0%B5%D0%BC%D0%B5%D1%86%D0%BA%D0%B8%D0%B9/meaning/H/Ha/Haus.jsonl"
+        );
+        assert_eq!(
+            build_lookup_url(&config, SupportedLookupLanguage::English, "house")
+                .unwrap()
+                .as_str(),
+            "https://kaikki.org/ruwiktionary/%D0%90%D0%BD%D0%B3%D0%BB%D0%B8%D0%B9%D1%81%D0%BA%D0%B8%D0%B9/meaning/h/ho/house.jsonl"
+        );
+        assert_eq!(
+            build_lookup_url(&config, SupportedLookupLanguage::Russian, "дом")
+                .unwrap()
+                .as_str(),
+            "https://kaikki.org/ruwiktionary/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9/meaning/%D0%B4/%D0%B4%D0%BE/%D0%B4%D0%BE%D0%BC.jsonl"
         );
     }
 
     #[test]
     fn rejects_untrusted_dictionary_hosts() {
-        let config = DictionaryClientConfig::for_tests("https://example.com/v1/ru/word/");
+        let config = DictionaryClientConfig::for_tests("https://example.com/ruwiktionary/");
 
         assert!(matches!(
-            build_lookup_url(&config, "Haus"),
-            Err(GermanWordLookupError::DictionaryUnavailable)
+            build_lookup_url(&config, SupportedLookupLanguage::German, "Haus"),
+            Err(WordLookupError::DictionaryUnavailable)
         ));
     }
 
     #[test]
     fn builds_lookup_url_for_explicitly_allowed_mock_host() {
         let config = DictionaryClientConfig::for_tests_with_allowed_hosts(
-            "https://localhost:8787/v1/ru/word/",
+            "https://localhost:8787/ruwiktionary/",
             &["localhost"],
         );
-        let url = build_lookup_url(&config, "Häuser").unwrap();
+        let url = build_lookup_url(&config, SupportedLookupLanguage::German, "Häuser").unwrap();
 
         assert_eq!(
             url.as_str(),
-            "https://localhost:8787/v1/ru/word/H%C3%A4user?lang=de"
+            "https://localhost:8787/ruwiktionary/%D0%9D%D0%B5%D0%BC%D0%B5%D1%86%D0%BA%D0%B8%D0%B9/meaning/H/H%C3%A4/H%C3%A4user.jsonl"
         );
     }
 
     #[test]
-    fn parses_array_provider_response_into_lookup() {
-        let json = r#"[{
-            "word": "wir",
-            "pos": "pron",
-            "sounds": [{"ipa": "viːɐ̯"}],
-            "senses": [{
-                "glosses": ["мы"],
-                "tags": ["first-person", "plural", "nominative"]
-            }]
-        }]"#;
+    fn rejects_oversized_provider_responses() {
+        let mut bytes = Vec::new();
+        let chunk = vec![b'x'; MAX_DICTIONARY_BYTES + 1];
 
-        let lookup = parse_provider_response("wir", json.as_bytes()).unwrap();
-
-        assert_eq!(lookup.query, "wir");
-        assert_eq!(lookup.headword, "wir");
-        assert_eq!(lookup.ipa.as_deref(), Some("viːɐ̯"));
-        assert_eq!(lookup.part_of_speech.as_deref(), Some("местоимение"));
-        assert_eq!(lookup.meanings, vec!["мы"]);
-        assert!(lookup.grammar.contains(&"1-е лицо".to_string()));
-        assert!(lookup.grammar.contains(&"множественное число".to_string()));
-        assert!(lookup.grammar.contains(&"именительный падеж".to_string()));
-        assert_eq!(lookup.source, "ruwiktionary");
+        assert!(matches!(
+            append_dictionary_chunk(&mut bytes, &chunk),
+            Err(WordLookupError::DictionaryUnavailable)
+        ));
     }
 
     #[test]
-    fn maps_empty_provider_senses_to_not_found() {
-        let json = r#"[{"word": "x", "senses": []}]"#;
+    fn parses_german_english_and_russian_jsonl_entries() {
+        let german = r#"{"word":"Haus","pos":"noun","lang_code":"de","lang":"Немецкий","sounds":[{"ipa":"[haʊ̯s]"}],"tags":["neuter"],"senses":[{"glosses":["дом, здание"]}]}"#;
+        let english = r#"{"word":"house","pos":"noun","lang_code":"en","lang":"Английский","sounds":[{"ipa":"[haʊs]"}],"senses":[{"glosses":["дом (сооружение)"]}]}"#;
+        let russian = r#"{"word":"дом","pos":"noun","lang_code":"ru","lang":"Русский","sounds":[{"ipa":"[dom]"}],"tags":["masculine","inanimate"],"senses":[{"glosses":["архитектурное сооружение, предназначенное для жилья"]}]}"#;
+
+        let german_lookup =
+            parse_provider_response(SupportedLookupLanguage::German, "Haus", german.as_bytes())
+                .unwrap();
+        assert_eq!(
+            german_lookup.language,
+            SupportedLookupLanguage::German.code()
+        );
+        assert_eq!(german_lookup.language_name, "Немецкий");
+        assert_eq!(german_lookup.ipa.as_deref(), Some("haʊ̯s"));
+        assert_eq!(
+            german_lookup.part_of_speech.as_deref(),
+            Some("существительное")
+        );
+        assert!(german_lookup.grammar.contains(&"средний род".to_string()));
+        assert_eq!(german_lookup.source, "ruwiktionary-kaikki");
+        assert_eq!(
+            german_lookup.source_url.as_deref(),
+            Some("https://kaikki.org/ruwiktionary/%D0%9D%D0%B5%D0%BC%D0%B5%D1%86%D0%BA%D0%B8%D0%B9/meaning/H/Ha/Haus.html")
+        );
+
+        assert_eq!(
+            parse_provider_response(
+                SupportedLookupLanguage::English,
+                "house",
+                english.as_bytes()
+            )
+            .unwrap()
+            .meanings,
+            vec!["дом (сооружение)"]
+        );
+        assert_eq!(
+            parse_provider_response(SupportedLookupLanguage::Russian, "дом", russian.as_bytes())
+                .unwrap()
+                .headword,
+            "дом"
+        );
+    }
+
+    #[test]
+    fn parses_multiple_jsonl_entries_with_meaning_cap() {
+        let jsonl = [
+            r#"{"word":"house","pos":"noun","lang_code":"en","lang":"Английский","senses":[{"glosses":["дом"]},{"glosses":["театр"]},{"glosses":["династия"]},{"glosses":["палата"]}]}"#,
+            r#"{"word":"house","pos":"verb","lang_code":"en","lang":"Английский","senses":[{"glosses":["размещать"]},{"glosses":["вмещать"]},{"glosses":["укладывать"]}]}"#,
+        ]
+        .join("\n");
+
+        let lookup =
+            parse_provider_response(SupportedLookupLanguage::English, "house", jsonl.as_bytes())
+                .unwrap();
+
+        assert_eq!(lookup.meanings.len(), 6);
+        assert!(lookup.meanings.contains(&"дом".to_string()));
+        assert!(lookup.meanings.contains(&"вмещать".to_string()));
+    }
+
+    #[test]
+    fn ignores_non_matching_language_entries_in_jsonl() {
+        let jsonl = [
+            r#"{"word":"house","pos":"noun","lang_code":"de","lang":"Немецкий","senses":[{"glosses":["ошибочный язык"]}]}"#,
+            r#"{"word":"house","pos":"noun","lang_code":"en","lang":"Английский","senses":[{"glosses":["дом"]}]}"#,
+        ]
+        .join("\n");
+
+        let lookup =
+            parse_provider_response(SupportedLookupLanguage::English, "house", jsonl.as_bytes())
+                .unwrap();
+
+        assert_eq!(lookup.meanings, vec!["дом"]);
+    }
+
+    #[test]
+    fn maps_empty_provider_glosses_to_not_found() {
+        let jsonl = r#"{"word":"x","lang_code":"en","senses":[{"glosses":[]}]}"#;
 
         assert!(matches!(
-            parse_provider_response("x", json.as_bytes()),
-            Err(GermanWordLookupError::NotFound)
+            parse_provider_response(SupportedLookupLanguage::English, "x", jsonl.as_bytes()),
+            Err(WordLookupError::NotFound)
         ));
     }
 
     #[test]
     fn maps_provider_contract_drift_to_dictionary_unavailable() {
         assert!(matches!(
-            parse_provider_response("x", br#"{"unexpected":[]}"#),
-            Err(GermanWordLookupError::DictionaryUnavailable)
+            parse_provider_response(
+                SupportedLookupLanguage::English,
+                "x",
+                br#"{"unexpected":[]}"#
+            ),
+            Err(WordLookupError::DictionaryUnavailable)
+        ));
+        assert!(matches!(
+            parse_provider_response(
+                SupportedLookupLanguage::English,
+                "x",
+                br#"{"word":"x","lang_code":"en","senses":[}"#
+            ),
+            Err(WordLookupError::DictionaryUnavailable)
         ));
     }
 
     #[test]
-    fn caches_successful_and_not_found_results() {
-        let state = GermanDictionaryState::default();
-        let lookup = GermanWordLookup {
+    fn caches_successful_and_not_found_results_by_language_key() {
+        let state = DictionaryState::default();
+        let lookup = WordLookup {
             query: "wir".to_string(),
             headword: "wir".to_string(),
+            language: "de".to_string(),
+            language_name: "Немецкий".to_string(),
             ipa: Some("viːɐ̯".to_string()),
             part_of_speech: Some("местоимение".to_string()),
             grammar: vec!["1-е лицо".to_string()],
             meanings: vec!["мы".to_string()],
-            source: "ruwiktionary".to_string(),
-            source_url: Some("https://ru.wiktionary.org/wiki/wir".to_string()),
+            source: "ruwiktionary-kaikki".to_string(),
+            source_url: Some(
+                "https://kaikki.org/ruwiktionary/%D0%9D%D0%B5%D0%BC%D0%B5%D1%86%D0%BA%D0%B8%D0%B9/meaning/w/wi/wir.html"
+                    .to_string(),
+            ),
         };
 
         state.store_cache("de:wir", CacheEntry::Found(lookup.clone()));
-        state.store_cache("de:nosuchword", CacheEntry::NotFound);
+        state.store_cache("en:wir", CacheEntry::NotFound);
 
         assert_eq!(state.cached("de:wir"), Some(CacheEntry::Found(lookup)));
-        assert_eq!(state.cached("de:nosuchword"), Some(CacheEntry::NotFound));
+        assert_eq!(state.cached("en:wir"), Some(CacheEntry::NotFound));
+        assert_eq!(state.cached("ru:wir"), None);
     }
 }
