@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
 import { VideoPlayer } from "@/components/video-player";
-import { isGermanTrackLang } from "@/lib/dictionary/is-german-track";
-import type { GermanWordLookup, WordLookupState } from "@/lib/dictionary/types";
+import { getSupportedLookupLanguage } from "@/lib/dictionary/supported-lookup-language";
+import type { WordLookup, WordLookupState } from "@/lib/dictionary/types";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
 import type { LoadedSubtitleTrack, LoadedVideo, SubtitleCue, SubtitleLane, SubtitleTrack, SubtitleWord } from "@/lib/subtitles/types";
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
@@ -68,7 +68,9 @@ export default function App() {
       };
       setHeldSubtitleTimeMs(holdAtMs);
 
-      if (!selectedTrack || !isGermanTrackLang(selectedTrack.lang)) {
+      const lookupLanguage = getSupportedLookupLanguage(selectedTrack?.lang);
+
+      if (!selectedTrack || !lookupLanguage) {
         lookupRequestIdRef.current += 1;
         setWordLookup({ status: "idle" });
         return;
@@ -79,7 +81,7 @@ export default function App() {
       lookupRequestIdRef.current = requestId;
 
       setWordLookup({ status: "loading", query });
-      void invoke<GermanWordLookup>("lookup_german_word", {
+      void invoke<WordLookup>("lookup_word", {
         word: query,
         cueText: cue.text,
         trackLang: selectedTrack.lang,
