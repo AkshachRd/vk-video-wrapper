@@ -107,6 +107,36 @@ describe("WordLookupPopover", () => {
     expect(screen.getByText(/мужской род/)).toBeInTheDocument();
   });
 
+  it("handles nullable backend fields in ready lookup data", () => {
+    render(
+      <WordLookupPopover
+        fallbackWord="дом"
+        lookup={{
+          status: "ready",
+          query: "дом",
+          data: {
+            query: "дом",
+            headword: "дом",
+            language: "ru",
+            languageName: "Русский",
+            ipa: null,
+            partOfSpeech: null,
+            grammar: [],
+            meanings: ["жилище"],
+            source: "ruwiktionary-kaikki",
+            sourceUrl: null,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("дом")).toBeInTheDocument();
+    expect(screen.getByText("жилище")).toBeInTheDocument();
+    expect(screen.getByText("ruwiktionary-kaikki")).toBeInTheDocument();
+    expect(screen.queryByText("/null/")).not.toBeInTheDocument();
+    expect(screen.queryByText("Грамматика")).not.toBeInTheDocument();
+  });
+
   it("renders not-found and unavailable messages", () => {
     const { rerender } = render(
       <WordLookupPopover fallbackWord="x" lookup={{ status: "not-found", query: "x" }} />,
@@ -129,9 +159,12 @@ describe("WordLookupPopover", () => {
             headword: "Donaudampfschifffahrtsgesellschaftskapitän",
             language: "de",
             languageName: "Немецкий",
+            ipa: null,
+            partOfSpeech: null,
             grammar: ["сложное существительное"],
             meanings: ["очень длинное значение без переносов".repeat(4)],
             source: "ruwiktionary-kaikki",
+            sourceUrl: null,
           },
         }}
       />,

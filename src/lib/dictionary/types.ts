@@ -5,12 +5,12 @@ export interface WordLookup {
   headword: string;
   language: SupportedLookupLanguage;
   languageName: "Немецкий" | "Английский" | "Русский";
-  ipa?: string;
-  partOfSpeech?: string;
+  ipa: string | null;
+  partOfSpeech: string | null;
   grammar: string[];
   meanings: string[];
   source: "ruwiktionary-kaikki";
-  sourceUrl?: string;
+  sourceUrl: string | null;
 }
 
 export type WordLookupState =
