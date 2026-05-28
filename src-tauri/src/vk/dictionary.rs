@@ -781,7 +781,7 @@ fn build_source_url(language: SupportedLookupLanguage, headword: &str) -> Option
 }
 
 fn cache_key(language: SupportedLookupLanguage, word: &str) -> String {
-    format!("{}:{}", language.code(), word.to_lowercase())
+    format!("{}:{word}", language.code())
 }
 
 fn push_unique(values: &mut Vec<String>, value: String) {
@@ -983,6 +983,16 @@ mod tests {
             ),
             Err(WordLookupError::DictionaryUnavailable)
         ));
+    }
+
+    #[test]
+    fn cache_keys_preserve_lookup_word_casing() {
+        assert_eq!(cache_key(SupportedLookupLanguage::German, "Sie"), "de:Sie");
+        assert_eq!(cache_key(SupportedLookupLanguage::German, "sie"), "de:sie");
+        assert_ne!(
+            cache_key(SupportedLookupLanguage::German, "Sie"),
+            cache_key(SupportedLookupLanguage::German, "sie")
+        );
     }
 
     #[test]
