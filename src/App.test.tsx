@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WordLookup } from "@/lib/dictionary/types";
+import type { SavedWord } from "@/lib/saved-words/types";
 import type { LoadedVideo } from "@/lib/subtitles/types";
 
 import App from "./App";
@@ -361,6 +362,69 @@ describe("App", () => {
       },
     });
     expect(await screen.findByText("Сохранено")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Сохраненные слова" })).toHaveTextContent("Welt");
+  });
+
+  it("keeps a confirmed save when delayed startup saved words resolve later", async () => {
+    const user = userEvent.setup();
+    let resolveSavedWords: (words: SavedWord[]) => void = () => {};
+
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return new Promise<SavedWord[]>((resolve) => {
+          resolveSavedWords = resolve;
+        });
+      }
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+      if (command === "lookup_word") {
+        return Promise.resolve(wordLookup({
+          query: "Welt",
+          headword: "Welt",
+          meanings: ["мир"],
+        }));
+      }
+      if (command === "save_word") {
+        return Promise.resolve({
+          id: "de:welt",
+          normalizedWord: "welt",
+          displayWord: "Welt",
+          language: "de",
+          languageName: "Немецкий",
+          firstMeaning: "мир",
+          source: "ruwiktionary-kaikki",
+          sourceUrl: null,
+          createdAtMs: 1000,
+          updatedAtMs: 1000,
+        });
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Welt" }));
+    await screen.findByText("мир");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    const savedWordsPanel = screen.getByRole("region", { name: "Сохраненные слова" });
+    expect(await screen.findByText("Сохранено")).toBeInTheDocument();
+    expect(savedWordsPanel).toHaveTextContent("Welt");
+
+    await act(async () => {
+      resolveSavedWords([]);
+    });
+
     expect(screen.getByRole("region", { name: "Сохраненные слова" })).toHaveTextContent("Welt");
   });
 
@@ -923,6 +987,57 @@ describe("App", () => {
 
     expect(screen.getByLabelText("Word details: Hello")).toHaveTextContent("Hello");
     expect(mocks.invoke.mock.calls.some(([command]) => command === "lookup_word")).toBe(false);
+  });
+
+  it("saves unsupported-track fallback words with raw track language", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: [frenchTrack],
+            selectedTrackId: "fr_4_fr.vtt",
+          }),
+        );
+      }
+      if (command === "save_word") {
+        return Promise.resolve({
+          id: "fr:hello",
+          normalizedWord: "hello",
+          displayWord: "Hello",
+          language: "fr",
+          languageName: null,
+          firstMeaning: null,
+          source: null,
+          sourceUrl: null,
+          createdAtMs: 1000,
+          updatedAtMs: 1000,
+        });
+      }
+
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Hello" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(mocks.invoke.mock.calls.some(([command]) => command === "lookup_word")).toBe(false);
+    expect(mocks.invoke).toHaveBeenCalledWith("save_word", {
+      payload: {
+        displayWord: "Hello",
+        language: "fr",
+        languageName: null,
+        firstMeaning: null,
+        source: null,
+        sourceUrl: null,
+      },
+    });
   });
 
   it("ignores stale dictionary lookup responses after another word is inspected", async () => {

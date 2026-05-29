@@ -33,6 +33,8 @@ type PendingSubtitlePause = {
   holdAtMs: number;
 };
 
+type PendingSavedWordAction = "saving" | "removing";
+
 export default function App() {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -47,13 +49,16 @@ export default function App() {
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
   const [areSavedWordsLoading, setAreSavedWordsLoading] = useState(true);
   const [savedWordsUnavailable, setSavedWordsUnavailable] = useState(false);
-  const [savingWordKey, setSavingWordKey] = useState<string | undefined>();
+  const [pendingSavedWordActions, setPendingSavedWordActions] = useState<Record<string, PendingSavedWordAction>>({});
   const [saveWordErrorKey, setSaveWordErrorKey] = useState<string | undefined>();
   const requestIdRef = useRef(0);
   const trackRequestIdRef = useRef(0);
   const lookupRequestIdRef = useRef(0);
   const playerControlsRef = useRef<Pick<VkPlayerControls, "pause"> | undefined>(undefined);
   const pendingSubtitlePauseRef = useRef<PendingSubtitlePause | undefined>(undefined);
+  const savedWordsMutatedRef = useRef(false);
+  const removedSavedWordIdsRef = useRef(new Set<string>());
+  const removedSavedWordKeysRef = useRef(new Set<string>());
   const selectedTrack = video?.tracks.find((track) => track.id === selectedTrackId);
 
   useEffect(() => {
@@ -61,7 +66,21 @@ export default function App() {
 
     void invoke<SavedWord[]>("list_saved_words")
       .then((words) => {
-        if (!cancelled) setSavedWords(words);
+        if (!cancelled) {
+          setSavedWords((currentWords) => {
+            if (!savedWordsMutatedRef.current) {
+              return words;
+            }
+
+            const filteredWords = words.filter(
+              (word) =>
+                !removedSavedWordIdsRef.current.has(word.id) &&
+                !removedSavedWordKeysRef.current.has(savedWordKey(word.language, word.normalizedWord)),
+            );
+
+            return mergeSavedWords(filteredWords, currentWords);
+          });
+        }
       })
       .catch(() => {
         if (!cancelled) setSavedWordsUnavailable(true);
@@ -133,6 +152,25 @@ export default function App() {
     [selectedTrack],
   );
 
+  const setPendingSavedWordAction = useCallback((key: string, action: PendingSavedWordAction) => {
+    setPendingSavedWordActions((actions) => ({
+      ...actions,
+      [key]: action,
+    }));
+  }, []);
+
+  const clearPendingSavedWordAction = useCallback((key: string) => {
+    setPendingSavedWordActions((actions) => {
+      if (!(key in actions)) {
+        return actions;
+      }
+
+      const remainingActions = { ...actions };
+      delete remainingActions[key];
+      return remainingActions;
+    });
+  }, []);
+
   const handleToggleSavedWord = useCallback(
     async (fallbackWord: string, lookup: WordLookupState) => {
       const payload = buildSaveWordRequest({
@@ -144,7 +182,7 @@ export default function App() {
       const key = savedWordKey(payload.language, normalizedWord);
       const existingWord = savedWords.find((word) => savedWordKey(word.language, word.normalizedWord) === key);
 
-      setSavingWordKey(key);
+      setPendingSavedWordAction(key, existingWord ? "removing" : "saving");
       setSaveWordErrorKey(undefined);
 
       try {
@@ -153,6 +191,9 @@ export default function App() {
             language: existingWord.language,
             normalizedWord: existingWord.normalizedWord,
           });
+          savedWordsMutatedRef.current = true;
+          removedSavedWordIdsRef.current.add(existingWord.id);
+          removedSavedWordKeysRef.current.add(savedWordKey(existingWord.language, existingWord.normalizedWord));
           setSavedWords((words) => words.filter((word) => word.id !== existingWord.id));
           return;
         }
@@ -160,20 +201,23 @@ export default function App() {
         const savedWord = await invoke<SavedWord>("save_word", {
           payload,
         });
+        savedWordsMutatedRef.current = true;
+        removedSavedWordIdsRef.current.delete(savedWord.id);
+        removedSavedWordKeysRef.current.delete(savedWordKey(savedWord.language, savedWord.normalizedWord));
         setSavedWords((words) => replaceSavedWord(words, savedWord));
       } catch {
         setSaveWordErrorKey(key);
       } finally {
-        setSavingWordKey(undefined);
+        clearPendingSavedWordAction(key);
       }
     },
-    [savedWords, selectedTrack],
+    [clearPendingSavedWordAction, savedWords, selectedTrack, setPendingSavedWordAction],
   );
 
   const handleRemoveSavedWord = useCallback(async (word: SavedWord) => {
     const key = savedWordKey(word.language, word.normalizedWord);
 
-    setSavingWordKey(key);
+    setPendingSavedWordAction(key, "removing");
     setSaveWordErrorKey(undefined);
 
     try {
@@ -181,13 +225,16 @@ export default function App() {
         language: word.language,
         normalizedWord: word.normalizedWord,
       });
+      savedWordsMutatedRef.current = true;
+      removedSavedWordIdsRef.current.add(word.id);
+      removedSavedWordKeysRef.current.add(key);
       setSavedWords((words) => words.filter((savedWord) => savedWord.id !== word.id));
     } catch {
       setSaveWordErrorKey(key);
     } finally {
-      setSavingWordKey(undefined);
+      clearPendingSavedWordAction(key);
     }
-  }, []);
+  }, [clearPendingSavedWordAction, setPendingSavedWordAction]);
 
   const getWordSaveControl = useCallback(
     (_cue: SubtitleCue, _word: SubtitleWord, fallbackWord: string, lookup: WordLookupState): WordSaveControl => {
@@ -204,10 +251,11 @@ export default function App() {
       const key = savedWordKey(payload.language, normalizedWord);
       const isSaved = savedWords.some((word) => savedWordKey(word.language, word.normalizedWord) === key);
       const error = saveWordErrorKey === key ? SAVE_WORD_ERROR : undefined;
+      const pendingAction = pendingSavedWordActions[key];
 
-      if (savingWordKey === key) {
+      if (pendingAction) {
         return {
-          status: isSaved ? "removing" : "saving",
+          status: pendingAction,
           onToggle: () => {},
           error,
         };
@@ -221,7 +269,7 @@ export default function App() {
         error,
       };
     },
-    [handleToggleSavedWord, savedWords, savedWordsUnavailable, saveWordErrorKey, savingWordKey, selectedTrack],
+    [handleToggleSavedWord, pendingSavedWordActions, savedWords, savedWordsUnavailable, saveWordErrorKey, selectedTrack],
   );
 
   const handleSubtitleWordInspectEnd = useCallback(() => {
@@ -480,6 +528,11 @@ function savedWordKey(language: string, normalizedWord: string): string {
 function replaceSavedWord(words: SavedWord[], savedWord: SavedWord): SavedWord[] {
   const withoutExisting = words.filter((word) => word.id !== savedWord.id);
   return [savedWord, ...withoutExisting];
+}
+
+function mergeSavedWords(base: SavedWord[], current: SavedWord[]): SavedWord[] {
+  const currentIds = new Set(current.map((word) => word.id));
+  return [...current, ...base.filter((word) => !currentIds.has(word.id))];
 }
 
 function buildSaveWordRequest({
