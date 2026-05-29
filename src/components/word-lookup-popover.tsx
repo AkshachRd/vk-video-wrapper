@@ -1,10 +1,13 @@
 import type { ReactNode } from "react";
 
+import { Button } from "@/components/ui/button";
 import type { WordLookupState } from "@/lib/dictionary/types";
+import type { WordSaveControl } from "@/lib/saved-words/types";
 
 type WordLookupPopoverProps = {
   fallbackWord: string;
   lookup: WordLookupState;
+  saveControl?: WordSaveControl;
 };
 
 const contentClassName = "max-w-[min(22rem,calc(100vw-2rem))] space-y-1 break-words text-left";
@@ -24,9 +27,41 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function WordLookupPopover({ fallbackWord, lookup }: WordLookupPopoverProps) {
+function SavedWordButton({ control }: { control?: WordSaveControl }) {
+  if (!control) return null;
+
+  const labels = {
+    unsaved: "Сохранить",
+    saving: "Сохраняю...",
+    saved: "Сохранено",
+    removing: "Удаляю...",
+    unavailable: "Сохранение недоступно",
+  };
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
+      <Button
+        type="button"
+        className="h-8 w-full"
+        variant={control.status === "saved" ? "secondary" : "default"}
+        disabled={control.status === "saving" || control.status === "removing" || control.status === "unavailable"}
+        onClick={control.onToggle}
+      >
+        {labels[control.status]}
+      </Button>
+      {control.error ? <div className="text-xs text-red-300">{control.error}</div> : null}
+    </div>
+  );
+}
+
+export function WordLookupPopover({ fallbackWord, lookup, saveControl }: WordLookupPopoverProps) {
   if (lookup.status === "idle") {
-    return <span className="font-medium text-white break-words">{fallbackWord}</span>;
+    return (
+      <div>
+        <span className="font-medium text-white break-words">{fallbackWord}</span>
+        <SavedWordButton control={saveControl} />
+      </div>
+    );
   }
 
   if (lookup.status === "loading") {
@@ -34,6 +69,7 @@ export function WordLookupPopover({ fallbackWord, lookup }: WordLookupPopoverPro
       <div className={contentClassName}>
         <PopoverWordHeader word={lookup.query || fallbackWord} />
         <div className="text-sm text-slate-300">Ищу в словаре...</div>
+        <SavedWordButton control={saveControl} />
       </div>
     );
   }
@@ -43,6 +79,7 @@ export function WordLookupPopover({ fallbackWord, lookup }: WordLookupPopoverPro
       <div className={contentClassName}>
         <PopoverWordHeader word={fallbackWord} />
         <div className="text-sm text-slate-300">Слово не найдено в словаре</div>
+        <SavedWordButton control={saveControl} />
       </div>
     );
   }
@@ -52,6 +89,7 @@ export function WordLookupPopover({ fallbackWord, lookup }: WordLookupPopoverPro
       <div className={contentClassName}>
         <PopoverWordHeader word={fallbackWord} />
         <div className="text-sm text-slate-300">Словарь сейчас недоступен</div>
+        <SavedWordButton control={saveControl} />
       </div>
     );
   }
@@ -89,6 +127,7 @@ export function WordLookupPopover({ fallbackWord, lookup }: WordLookupPopoverPro
       </Section>
 
       {grammarText ? <Section label="Грамматика">{grammarText}</Section> : null}
+      <SavedWordButton control={saveControl} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { WordLookupPopover } from "./word-lookup-popover";
 
@@ -172,5 +173,41 @@ describe("WordLookupPopover", () => {
 
     expect(container.firstElementChild).toHaveClass("max-w-[min(22rem,calc(100vw-2rem))]");
     expect(container.firstElementChild).toHaveClass("break-words");
+  });
+
+  it("renders save controls for an unsaved word", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    render(
+      <WordLookupPopover
+        fallbackWord="Welt"
+        lookup={{ status: "idle" }}
+        saveControl={{ status: "unsaved", onToggle }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders saved and unavailable save states", () => {
+    const { rerender } = render(
+      <WordLookupPopover
+        fallbackWord="Welt"
+        lookup={{ status: "idle" }}
+        saveControl={{ status: "saved", onToggle: vi.fn() }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Сохранено" })).toBeInTheDocument();
+
+    rerender(
+      <WordLookupPopover
+        fallbackWord="Welt"
+        lookup={{ status: "idle" }}
+        saveControl={{ status: "unavailable" }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Сохранение недоступно" })).toBeDisabled();
   });
 });

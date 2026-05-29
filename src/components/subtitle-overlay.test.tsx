@@ -123,6 +123,23 @@ describe("SubtitleOverlay", () => {
     expect(screen.getByText("Ищу в словаре...")).toBeInTheDocument();
   });
 
+  it("shows save controls from the word save callback inside an open popover", async () => {
+    const user = userEvent.setup();
+    render(
+      <SubtitleOverlay
+        lane={lane}
+        timeMs={1200}
+        getWordSaveControl={(_cue, _word, fallbackWord) =>
+          fallbackWord === "утро" ? { status: "unsaved", onToggle: vi.fn() } : undefined
+        }
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "утро!" }));
+
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeInTheDocument();
+  });
+
   it("does not show lookup state for a different word", async () => {
     const user = userEvent.setup();
     render(

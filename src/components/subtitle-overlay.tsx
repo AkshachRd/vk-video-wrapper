@@ -1,6 +1,7 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WordLookupPopover } from "@/components/word-lookup-popover";
 import type { WordLookupState } from "@/lib/dictionary/types";
+import type { WordSaveControl } from "@/lib/saved-words/types";
 import { selectActiveCue } from "@/lib/subtitles/select-active-cue";
 import type { SubtitleCue, SubtitleLane, SubtitleWord } from "@/lib/subtitles/types";
 
@@ -10,6 +11,12 @@ type SubtitleOverlayProps = {
   wordLookup?: WordLookupState;
   onWordInspect?: (cue: SubtitleCue, word: SubtitleWord) => void;
   onWordInspectEnd?: () => void;
+  getWordSaveControl?: (
+    cue: SubtitleCue,
+    word: SubtitleWord,
+    fallbackWord: string,
+    lookup: WordLookupState,
+  ) => WordSaveControl | undefined;
 };
 
 const IDLE_WORD_LOOKUP: WordLookupState = { status: "idle" };
@@ -34,6 +41,7 @@ export function SubtitleOverlay({
   wordLookup,
   onWordInspect,
   onWordInspectEnd,
+  getWordSaveControl,
 }: SubtitleOverlayProps) {
   const cue = selectActiveCue(lane.cues, timeMs);
   if (!cue) return null;
@@ -43,6 +51,8 @@ export function SubtitleOverlay({
       <div className="pointer-events-auto max-w-4xl rounded-md bg-black/70 px-4 py-3 text-center text-2xl leading-relaxed text-white shadow-lg">
         {cue.words.map((word) => {
           const fallbackWord = word.cleanText || word.text;
+          const lookup = lookupForWord(wordLookup, fallbackWord);
+          const saveControl = getWordSaveControl?.(cue, word, fallbackWord, lookup);
 
           return (
             <Popover
@@ -65,7 +75,7 @@ export function SubtitleOverlay({
                 </button>
               </PopoverTrigger>
               <PopoverContent aria-label={`Word details: ${fallbackWord}`}>
-                <WordLookupPopover fallbackWord={fallbackWord} lookup={lookupForWord(wordLookup, fallbackWord)} />
+                <WordLookupPopover fallbackWord={fallbackWord} lookup={lookup} saveControl={saveControl} />
               </PopoverContent>
             </Popover>
           );
