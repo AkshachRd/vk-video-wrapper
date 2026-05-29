@@ -377,8 +377,10 @@ mod tests {
     fn rejects_empty_or_punctuation_only_words() {
         let state = SavedWordsState::in_memory_for_tests().unwrap();
 
-        let error = save_word_in_state(&state, request("...", "de"), 1000).unwrap_err();
+        let empty_error = save_word_in_state(&state, request("", "de"), 1000).unwrap_err();
+        let punctuation_error = save_word_in_state(&state, request("...", "de"), 1000).unwrap_err();
 
-        assert_eq!(error.kind(), "invalid-saved-word");
+        assert_eq!(empty_error.kind(), "invalid-saved-word");
+        assert_eq!(punctuation_error.kind(), "invalid-saved-word");
     }
 }
