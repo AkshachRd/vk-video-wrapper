@@ -1,13 +1,16 @@
-import { useCallback, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SavedWordsPanel } from "@/components/saved-words-panel";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
 import { VideoPlayer } from "@/components/video-player";
 import { getSupportedLookupLanguage } from "@/lib/dictionary/supported-lookup-language";
 import type { WordLookup, WordLookupState } from "@/lib/dictionary/types";
+import { normalizeSavedWord } from "@/lib/saved-words/normalize-saved-word";
+import type { SavedWord, SaveWordRequest, WordSaveControl } from "@/lib/saved-words/types";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
 import type { LoadedSubtitleTrack, LoadedVideo, SubtitleCue, SubtitleLane, SubtitleTrack, SubtitleWord } from "@/lib/subtitles/types";
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
@@ -23,6 +26,7 @@ const LOAD_ERROR_MESSAGES: Record<string, string> = {
 const UNKNOWN_LOAD_ERROR = "The video could not be loaded.";
 const SUBTITLE_PARSE_ERROR = "Subtitles could not be parsed for this video.";
 const TRACK_PARSE_ERROR = "Subtitles could not be parsed for this track.";
+const SAVE_WORD_ERROR = "Не удалось сохранить слово";
 
 type PendingSubtitlePause = {
   stopAtMs: number;
@@ -40,12 +44,36 @@ export default function App() {
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [isTrackLoading, setIsTrackLoading] = useState(false);
   const [wordLookup, setWordLookup] = useState<WordLookupState>({ status: "idle" });
+  const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
+  const [areSavedWordsLoading, setAreSavedWordsLoading] = useState(true);
+  const [savedWordsUnavailable, setSavedWordsUnavailable] = useState(false);
+  const [savingWordKey, setSavingWordKey] = useState<string | undefined>();
+  const [saveWordErrorKey, setSaveWordErrorKey] = useState<string | undefined>();
   const requestIdRef = useRef(0);
   const trackRequestIdRef = useRef(0);
   const lookupRequestIdRef = useRef(0);
   const playerControlsRef = useRef<Pick<VkPlayerControls, "pause"> | undefined>(undefined);
   const pendingSubtitlePauseRef = useRef<PendingSubtitlePause | undefined>(undefined);
   const selectedTrack = video?.tracks.find((track) => track.id === selectedTrackId);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void invoke<SavedWord[]>("list_saved_words")
+      .then((words) => {
+        if (!cancelled) setSavedWords(words);
+      })
+      .catch(() => {
+        if (!cancelled) setSavedWordsUnavailable(true);
+      })
+      .finally(() => {
+        if (!cancelled) setAreSavedWordsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const resetWordLookup = useCallback(() => {
     lookupRequestIdRef.current += 1;
@@ -103,6 +131,97 @@ export default function App() {
         });
     },
     [selectedTrack],
+  );
+
+  const handleToggleSavedWord = useCallback(
+    async (fallbackWord: string, lookup: WordLookupState) => {
+      const payload = buildSaveWordRequest({
+        fallbackWord,
+        selectedTrack,
+        lookup,
+      });
+      const normalizedWord = normalizeSavedWord(payload.displayWord);
+      const key = savedWordKey(payload.language, normalizedWord);
+      const existingWord = savedWords.find((word) => savedWordKey(word.language, word.normalizedWord) === key);
+
+      setSavingWordKey(key);
+      setSaveWordErrorKey(undefined);
+
+      try {
+        if (existingWord) {
+          await invoke("remove_saved_word", {
+            language: existingWord.language,
+            normalizedWord: existingWord.normalizedWord,
+          });
+          setSavedWords((words) => words.filter((word) => word.id !== existingWord.id));
+          return;
+        }
+
+        const savedWord = await invoke<SavedWord>("save_word", {
+          payload,
+        });
+        setSavedWords((words) => replaceSavedWord(words, savedWord));
+      } catch {
+        setSaveWordErrorKey(key);
+      } finally {
+        setSavingWordKey(undefined);
+      }
+    },
+    [savedWords, selectedTrack],
+  );
+
+  const handleRemoveSavedWord = useCallback(async (word: SavedWord) => {
+    const key = savedWordKey(word.language, word.normalizedWord);
+
+    setSavingWordKey(key);
+    setSaveWordErrorKey(undefined);
+
+    try {
+      await invoke("remove_saved_word", {
+        language: word.language,
+        normalizedWord: word.normalizedWord,
+      });
+      setSavedWords((words) => words.filter((savedWord) => savedWord.id !== word.id));
+    } catch {
+      setSaveWordErrorKey(key);
+    } finally {
+      setSavingWordKey(undefined);
+    }
+  }, []);
+
+  const getWordSaveControl = useCallback(
+    (_cue: SubtitleCue, _word: SubtitleWord, fallbackWord: string, lookup: WordLookupState): WordSaveControl => {
+      if (savedWordsUnavailable) {
+        return { status: "unavailable" };
+      }
+
+      const payload = buildSaveWordRequest({
+        fallbackWord,
+        selectedTrack,
+        lookup,
+      });
+      const normalizedWord = normalizeSavedWord(payload.displayWord);
+      const key = savedWordKey(payload.language, normalizedWord);
+      const isSaved = savedWords.some((word) => savedWordKey(word.language, word.normalizedWord) === key);
+      const error = saveWordErrorKey === key ? SAVE_WORD_ERROR : undefined;
+
+      if (savingWordKey === key) {
+        return {
+          status: isSaved ? "removing" : "saving",
+          onToggle: () => {},
+          error,
+        };
+      }
+
+      return {
+        status: isSaved ? "saved" : "unsaved",
+        onToggle: () => {
+          void handleToggleSavedWord(fallbackWord, lookup);
+        },
+        error,
+      };
+    },
+    [handleToggleSavedWord, savedWords, savedWordsUnavailable, saveWordErrorKey, savingWordKey, selectedTrack],
   );
 
   const handleSubtitleWordInspectEnd = useCallback(() => {
@@ -279,7 +398,7 @@ export default function App() {
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100">
-      <form className="mx-auto flex max-w-5xl gap-2" onSubmit={handleSubmit}>
+      <form className="mx-auto flex max-w-7xl gap-2" onSubmit={handleSubmit}>
         <Input
           aria-label="VK Video URL"
           placeholder="https://vkvideo.ru/video-..."
@@ -292,47 +411,56 @@ export default function App() {
         </Button>
       </form>
 
-      <section className="mx-auto mt-6 max-w-5xl">
+      <section className="mx-auto mt-6 max-w-7xl">
         {error ? <Alert>{error}</Alert> : null}
 
         {video && lane ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm text-slate-400">Loaded subtitles</div>
-              {video.tracks.length > 0 ? (
-                <label className="flex items-center gap-2 text-sm text-slate-300">
-                  <span>Subtitles</span>
-                  <select
-                    aria-label="Subtitles"
-                    value={selectedTrackId}
-                    disabled={isTrackLoading}
-                    onChange={handleTrackChange}
-                    className="h-9 min-w-40 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
-                  >
-                    {video.tracks.map((track) => (
-                      <option key={track.id} value={track.id}>
-                        {formatTrackLabel(track)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-slate-400">Loaded subtitles</div>
+                {video.tracks.length > 0 ? (
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <span>Subtitles</span>
+                    <select
+                      aria-label="Subtitles"
+                      value={selectedTrackId}
+                      disabled={isTrackLoading}
+                      onChange={handleTrackChange}
+                      className="h-9 min-w-40 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
+                    >
+                      {video.tracks.map((track) => (
+                        <option key={track.id} value={track.id}>
+                          {formatTrackLabel(track)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+              <div className="relative aspect-video overflow-hidden rounded-md border border-slate-800 bg-black">
+                <VideoPlayer
+                  embedUrl={video.embedUrl}
+                  onTimeUpdate={handleTimeUpdate}
+                  onPlaybackStart={handlePlaybackStart}
+                  onControlsReady={handlePlayerControlsReady}
+                />
+                <SubtitleOverlay
+                  lane={lane}
+                  timeMs={heldSubtitleTimeMs ?? timeMs}
+                  wordLookup={wordLookup}
+                  onWordInspect={handleSubtitleWordInspect}
+                  onWordInspectEnd={handleSubtitleWordInspectEnd}
+                  getWordSaveControl={getWordSaveControl}
+                />
+              </div>
             </div>
-            <div className="relative aspect-video overflow-hidden rounded-md border border-slate-800 bg-black">
-              <VideoPlayer
-                embedUrl={video.embedUrl}
-                onTimeUpdate={handleTimeUpdate}
-                onPlaybackStart={handlePlaybackStart}
-                onControlsReady={handlePlayerControlsReady}
-              />
-              <SubtitleOverlay
-                lane={lane}
-                timeMs={heldSubtitleTimeMs ?? timeMs}
-                wordLookup={wordLookup}
-                onWordInspect={handleSubtitleWordInspect}
-                onWordInspectEnd={handleSubtitleWordInspectEnd}
-              />
-            </div>
+            <SavedWordsPanel
+              words={savedWords}
+              isLoading={areSavedWordsLoading}
+              isUnavailable={savedWordsUnavailable}
+              onRemove={handleRemoveSavedWord}
+            />
           </div>
         ) : null}
       </section>
@@ -343,6 +471,46 @@ export default function App() {
 function formatTrackLabel(track: SubtitleTrack): string {
   const label = track.manifestName || track.title || track.lang || track.id;
   return track.isAuto ? `${label} auto` : label;
+}
+
+function savedWordKey(language: string, normalizedWord: string): string {
+  return `${language}:${normalizedWord}`;
+}
+
+function replaceSavedWord(words: SavedWord[], savedWord: SavedWord): SavedWord[] {
+  const withoutExisting = words.filter((word) => word.id !== savedWord.id);
+  return [savedWord, ...withoutExisting];
+}
+
+function buildSaveWordRequest({
+  fallbackWord,
+  selectedTrack,
+  lookup,
+}: {
+  fallbackWord: string;
+  selectedTrack: SubtitleTrack | undefined;
+  lookup: WordLookupState;
+}): SaveWordRequest {
+  if (lookup.status === "ready") {
+    return {
+      displayWord: lookup.data.headword,
+      language: lookup.data.language,
+      languageName: lookup.data.languageName,
+      firstMeaning: lookup.data.meanings[0] ?? null,
+      source: lookup.data.source,
+      sourceUrl: lookup.data.sourceUrl,
+    };
+  }
+
+  const supportedLanguage = getSupportedLookupLanguage(selectedTrack?.lang);
+  return {
+    displayWord: fallbackWord,
+    language: (supportedLanguage ?? selectedTrack?.lang.trim().toLocaleLowerCase()) || "unknown",
+    languageName: null,
+    firstMeaning: null,
+    source: null,
+    sourceUrl: null,
+  };
 }
 
 function mapLoadError(error: unknown): string {

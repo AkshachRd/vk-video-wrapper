@@ -239,11 +239,17 @@ describe("App", () => {
         },
       ];
     });
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return Promise.resolve([]);
+      }
+
+      return Promise.resolve(loadedVideo());
+    });
   });
 
   it("loads a VK video, parses subtitles, and renders the player", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockResolvedValue(loadedVideo());
 
     render(<App />);
 
@@ -263,14 +269,209 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "VK" })).toBeInTheDocument();
   });
 
+  it("loads saved words on startup and renders them beside the player", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return Promise.resolve([
+          {
+            id: "de:welt",
+            normalizedWord: "welt",
+            displayWord: "Welt",
+            language: "de",
+            languageName: "Немецкий",
+            firstMeaning: "мир",
+            source: "ruwiktionary-kaikki",
+            sourceUrl: null,
+            createdAtMs: 1000,
+            updatedAtMs: 1000,
+          },
+        ]);
+      }
+      if (command === "load_video_from_url") {
+        return Promise.resolve(loadedVideo());
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(await screen.findByRole("region", { name: "Сохраненные слова" })).toBeInTheDocument();
+    expect(screen.getByText("Welt")).toBeInTheDocument();
+    expect(screen.getByText("мир")).toBeInTheDocument();
+  });
+
+  it("saves a ready lookup word and updates the saved words panel", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+      if (command === "lookup_word") {
+        return Promise.resolve(wordLookup({
+          query: "Welt",
+          headword: "Welt",
+          meanings: ["мир"],
+        }));
+      }
+      if (command === "save_word") {
+        return Promise.resolve({
+          id: "de:welt",
+          normalizedWord: "welt",
+          displayWord: "Welt",
+          language: "de",
+          languageName: "Немецкий",
+          firstMeaning: "мир",
+          source: "ruwiktionary-kaikki",
+          sourceUrl: null,
+          createdAtMs: 1000,
+          updatedAtMs: 1000,
+        });
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Welt" }));
+    await screen.findByText("мир");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(mocks.invoke).toHaveBeenCalledWith("save_word", {
+      payload: {
+        displayWord: "Welt",
+        language: "de",
+        languageName: "Немецкий",
+        firstMeaning: "мир",
+        source: "ruwiktionary-kaikki",
+        sourceUrl: null,
+      },
+    });
+    expect(await screen.findByText("Сохранено")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Сохраненные слова" })).toHaveTextContent("Welt");
+  });
+
+  it("removes a saved word from the popover", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return Promise.resolve([
+          {
+            id: "de:welt",
+            normalizedWord: "welt",
+            displayWord: "Welt",
+            language: "de",
+            languageName: "Немецкий",
+            firstMeaning: "мир",
+            source: "ruwiktionary-kaikki",
+            sourceUrl: null,
+            createdAtMs: 1000,
+            updatedAtMs: 1000,
+          },
+        ]);
+      }
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+      if (command === "lookup_word") {
+        return Promise.resolve(wordLookup({
+          query: "Welt",
+          headword: "Welt",
+          meanings: ["мир"],
+        }));
+      }
+      if (command === "remove_saved_word") {
+        return Promise.resolve(undefined);
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Welt" }));
+    await user.click(await screen.findByRole("button", { name: "Сохранено" }));
+
+    expect(mocks.invoke).toHaveBeenCalledWith("remove_saved_word", {
+      language: "de",
+      normalizedWord: "welt",
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Сохраненные слова" })).not.toHaveTextContent("Welt");
+    });
+  });
+
+  it("shows save failure without closing the popover", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+      if (command === "lookup_word") {
+        return Promise.resolve(wordLookup({
+          query: "Welt",
+          headword: "Welt",
+          meanings: ["мир"],
+        }));
+      }
+      if (command === "save_word") {
+        return Promise.reject(JSON.stringify({ kind: "saved-words-unavailable" }));
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Welt" }));
+    await screen.findByText("мир");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(await screen.findByText("Не удалось сохранить слово")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Word details: Welt" })).toBeInTheDocument();
+  });
+
   it("maps serialized subtitle-not-found backend errors to a user-facing message", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockRejectedValue(
-      JSON.stringify({
-        kind: "subtitles-not-found",
-        message: "subtitles-not-found",
-      }),
-    );
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      return Promise.reject(
+        JSON.stringify({
+          kind: "subtitles-not-found",
+          message: "subtitles-not-found",
+        }),
+      );
+    });
 
     render(<App />);
 
@@ -284,7 +485,10 @@ describe("App", () => {
 
   it("maps plain string backend errors to a user-facing message", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockRejectedValue("subtitles-not-found");
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      return Promise.reject("subtitles-not-found");
+    });
 
     render(<App />);
 
@@ -298,11 +502,14 @@ describe("App", () => {
 
   it("shows a subtitle parse error when loaded subtitle text has no cues", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockResolvedValue(
-      loadedVideo({
-        subtitleText: "WEBVTT\n\nNOTE no cues here",
-      }),
-    );
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      return Promise.resolve(
+        loadedVideo({
+          subtitleText: "WEBVTT\n\nNOTE no cues here",
+        }),
+      );
+    });
 
     render(<App />);
 
@@ -316,7 +523,6 @@ describe("App", () => {
 
   it("shows a subtitle parse error when subtitle parsing throws", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockResolvedValue(loadedVideo());
     mocks.parseWebVtt.mockImplementationOnce(() => {
       throw new Error("parser failed");
     });
@@ -339,17 +545,19 @@ describe("App", () => {
     await user.type(screen.getByLabelText("VK Video URL"), "   ");
     await user.click(screen.getByRole("button", { name: "Load" }));
 
-    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.invoke.mock.calls.some(([command]) => command === "load_video_from_url")).toBe(false);
   });
 
   it("disables loading controls and ignores duplicate submits while loading", async () => {
     const user = userEvent.setup();
     let resolveLoad: (video: LoadedVideo) => void = () => {};
-    mocks.invoke.mockReturnValue(
-      new Promise<LoadedVideo>((resolve) => {
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+
+      return new Promise<LoadedVideo>((resolve) => {
         resolveLoad = resolve;
-      }),
-    );
+      });
+    });
 
     render(<App />);
 
@@ -362,7 +570,7 @@ describe("App", () => {
 
     await user.keyboard("{Enter}");
 
-    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    expect(mocks.invoke.mock.calls.filter(([command]) => command === "load_video_from_url")).toHaveLength(1);
 
     resolveLoad(loadedVideo());
 
@@ -371,12 +579,15 @@ describe("App", () => {
 
   it("shows a subtitle track dropdown with readable labels after loading", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockResolvedValue(
-      loadedVideo({
-        tracks: subtitleTracks,
-        selectedTrackId: "ru_0_ru.vtt",
-      }),
-    );
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      return Promise.resolve(
+        loadedVideo({
+          tracks: subtitleTracks,
+          selectedTrackId: "ru_0_ru.vtt",
+        }),
+      );
+    });
 
     render(<App />);
 
@@ -394,6 +605,7 @@ describe("App", () => {
   it("loads a selected subtitle track and updates rendered words", async () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
       if (command === "load_video_from_url") {
         return Promise.resolve(
           loadedVideo({
@@ -432,6 +644,7 @@ describe("App", () => {
     let resolveTrackLoad: (track: { selectedTrackId: string; subtitleText: string }) => void = () => {};
 
     mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
       if (command === "load_video_from_url") {
         loadCount += 1;
 
@@ -691,12 +904,15 @@ describe("App", () => {
 
   it("does not call dictionary lookup for unsupported tracks", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockResolvedValue(
-      loadedVideo({
-        tracks: [frenchTrack],
-        selectedTrackId: "fr_4_fr.vtt",
-      }),
-    );
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      return Promise.resolve(
+        loadedVideo({
+          tracks: [frenchTrack],
+          selectedTrackId: "fr_4_fr.vtt",
+        }),
+      );
+    });
 
     render(<App />);
 
@@ -715,6 +931,7 @@ describe("App", () => {
     let resolveWeltLookup: (lookup: WordLookup) => void = () => {};
 
     mocks.invoke.mockImplementation((command: string, args?: { word?: string }) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
       if (command === "load_video_from_url") {
         return Promise.resolve(
           loadedVideo({
@@ -776,6 +993,7 @@ describe("App", () => {
     let resolveLookup: (lookup: WordLookup) => void = () => {};
 
     mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
       if (command === "load_video_from_url") {
         return Promise.resolve(
           loadedVideo({
@@ -855,7 +1073,6 @@ describe("App", () => {
 
   it("pauses before moving to the next subtitle after a word is clicked", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockResolvedValue(loadedVideo());
 
     render(<App />);
 
@@ -892,7 +1109,6 @@ describe("App", () => {
 
   it("releases an inspected subtitle when playback resumes", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockResolvedValue(loadedVideo());
 
     render(<App />);
 
@@ -926,7 +1142,6 @@ describe("App", () => {
 
   it("keeps the boundary pause armed when playback starts before the inspected cue ends", async () => {
     const user = userEvent.setup();
-    mocks.invoke.mockResolvedValue(loadedVideo());
 
     render(<App />);
 
@@ -954,6 +1169,7 @@ describe("App", () => {
   it("keeps previous subtitles visible when selected track loading fails", async () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
       if (command === "load_video_from_url") {
         return Promise.resolve(
           loadedVideo({
@@ -986,6 +1202,7 @@ describe("App", () => {
   it("keeps previous subtitles visible when selected track cannot be parsed", async () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
       if (command === "load_video_from_url") {
         return Promise.resolve(
           loadedVideo({
