@@ -28,3 +28,4 @@ regex = "1"
 encoding_rs = "0.8"
 quick-xml = "0.39"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
