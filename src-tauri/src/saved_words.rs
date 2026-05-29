@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MIGRATION: &str = r#"
@@ -47,7 +47,7 @@ pub struct SaveWordRequest {
 }
 
 pub struct SavedWordsState {
-    connection: Mutex<Connection>,
+    connection: Option<Mutex<Connection>>,
 }
 
 impl SavedWordsState {
@@ -56,8 +56,12 @@ impl SavedWordsState {
         migrate(&connection)?;
 
         Ok(Self {
-            connection: Mutex::new(connection),
+            connection: Some(Mutex::new(connection)),
         })
+    }
+
+    pub fn unavailable() -> Self {
+        Self { connection: None }
     }
 
     #[cfg(test)]
@@ -66,8 +70,16 @@ impl SavedWordsState {
         migrate(&connection)?;
 
         Ok(Self {
-            connection: Mutex::new(connection),
+            connection: Some(Mutex::new(connection)),
         })
+    }
+
+    fn connection(&self) -> Result<MutexGuard<'_, Connection>, SavedWordsError> {
+        self.connection
+            .as_ref()
+            .ok_or(SavedWordsError::Unavailable)?
+            .lock()
+            .map_err(|_| SavedWordsError::Unavailable)
     }
 }
 
@@ -126,10 +138,7 @@ fn saved_word_id(language: &str, normalized_word: &str) -> String {
 pub fn list_saved_words_in_state(
     state: &SavedWordsState,
 ) -> Result<Vec<SavedWord>, SavedWordsError> {
-    let connection = state
-        .connection
-        .lock()
-        .map_err(|_| SavedWordsError::Unavailable)?;
+    let connection = state.connection()?;
     let mut statement = connection
         .prepare(
             r#"
@@ -145,7 +154,7 @@ pub fn list_saved_words_in_state(
               created_at_ms,
               updated_at_ms
             FROM saved_words
-            ORDER BY created_at_ms DESC
+            ORDER BY created_at_ms DESC, id ASC
             "#,
         )
         .map_err(|_| SavedWordsError::Unavailable)?;
@@ -164,16 +173,13 @@ pub fn save_word_in_state(
     payload: SaveWordRequest,
     now_ms: i64,
 ) -> Result<SavedWord, SavedWordsError> {
+    let connection = state.connection()?;
     let normalized_word =
         normalize_word(&payload.display_word).ok_or(SavedWordsError::InvalidSavedWord)?;
     let language = normalize_language(&payload.language);
     let id = saved_word_id(&language, &normalized_word);
     let display_word = payload.display_word.trim();
 
-    let connection = state
-        .connection
-        .lock()
-        .map_err(|_| SavedWordsError::Unavailable)?;
     connection
         .execute(
             r#"
@@ -221,13 +227,10 @@ pub fn remove_saved_word_in_state(
     language: &str,
     normalized_word: &str,
 ) -> Result<(), SavedWordsError> {
+    let connection = state.connection()?;
     let normalized_word =
         normalize_word(normalized_word).ok_or(SavedWordsError::InvalidSavedWord)?;
     let language = normalize_language(language);
-    let connection = state
-        .connection
-        .lock()
-        .map_err(|_| SavedWordsError::Unavailable)?;
 
     connection
         .execute(
@@ -382,5 +385,38 @@ mod tests {
 
         assert_eq!(empty_error.kind(), "invalid-saved-word");
         assert_eq!(punctuation_error.kind(), "invalid-saved-word");
+    }
+
+    #[test]
+    fn unavailable_state_returns_unavailable_errors() {
+        let state = SavedWordsState::unavailable();
+
+        let list_error = list_saved_words_in_state(&state).unwrap_err();
+        let save_error = save_word_in_state(&state, request("Haus", "de"), 1000).unwrap_err();
+        let remove_error = remove_saved_word_in_state(&state, "de", "haus").unwrap_err();
+
+        assert_eq!(list_error, SavedWordsError::Unavailable);
+        assert_eq!(save_error, SavedWordsError::Unavailable);
+        assert_eq!(remove_error, SavedWordsError::Unavailable);
+    }
+
+    #[test]
+    fn migration_creates_saved_words_table() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        let connection = state.connection().unwrap();
+
+        let table_name: String = connection
+            .query_row(
+                r#"
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'saved_words'
+                "#,
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(table_name, "saved_words");
     }
 }

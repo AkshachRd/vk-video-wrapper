@@ -8,14 +8,16 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let db_dir = app
+            let saved_words = app
                 .path()
                 .app_data_dir()
-                .map_err(|error| Box::<dyn std::error::Error>::from(error.to_string()))?;
-            std::fs::create_dir_all(&db_dir)?;
-            let db_path = db_dir.join("saved-words.sqlite3");
-            let saved_words = saved_words::SavedWordsState::new(&db_path)
-                .map_err(|error| Box::<dyn std::error::Error>::from(error.kind().to_string()))?;
+                .ok()
+                .and_then(|db_dir| {
+                    std::fs::create_dir_all(&db_dir).ok()?;
+                    let db_path = db_dir.join("saved-words.sqlite3");
+                    saved_words::SavedWordsState::new(&db_path).ok()
+                })
+                .unwrap_or_else(saved_words::SavedWordsState::unavailable);
             app.manage(saved_words);
             Ok(())
         })
