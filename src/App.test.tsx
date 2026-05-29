@@ -305,6 +305,139 @@ describe("App", () => {
     expect(screen.getByText("мир")).toBeInTheDocument();
   });
 
+  it("renders saved words unavailable state after startup list failure and disables popover save controls", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return Promise.reject(JSON.stringify({ kind: "saved-words-unavailable" }));
+      }
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+      if (command === "lookup_word") {
+        return Promise.resolve(wordLookup({
+          query: "Welt",
+          headword: "Welt",
+          meanings: ["мир"],
+        }));
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+
+    expect(await screen.findByText("Список слов недоступен")).toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Welt" }));
+
+    expect(await screen.findByRole("button", { name: "Сохранение недоступно" })).toBeDisabled();
+  });
+
+  it("removes a saved word from the saved words panel after backend success", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return Promise.resolve([
+          {
+            id: "de:welt",
+            normalizedWord: "welt",
+            displayWord: "Welt",
+            language: "de",
+            languageName: "Немецкий",
+            firstMeaning: "мир",
+            source: "ruwiktionary-kaikki",
+            sourceUrl: null,
+            createdAtMs: 1000,
+            updatedAtMs: 1000,
+          },
+        ]);
+      }
+      if (command === "load_video_from_url") {
+        return Promise.resolve(loadedVideo());
+      }
+      if (command === "remove_saved_word") {
+        return Promise.resolve(undefined);
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    expect(await screen.findByText("Welt")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Удалить Welt" }));
+
+    expect(mocks.invoke).toHaveBeenCalledWith("remove_saved_word", {
+      language: "de",
+      normalizedWord: "welt",
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Сохраненные слова" })).not.toHaveTextContent("Welt");
+    });
+  });
+
+  it("keeps a saved word visible and shows a panel error when panel remove fails", async () => {
+    const user = userEvent.setup();
+    let rejectRemove: (error: Error) => void = () => {};
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return Promise.resolve([
+          {
+            id: "de:welt",
+            normalizedWord: "welt",
+            displayWord: "Welt",
+            language: "de",
+            languageName: "Немецкий",
+            firstMeaning: "мир",
+            source: "ruwiktionary-kaikki",
+            sourceUrl: null,
+            createdAtMs: 1000,
+            updatedAtMs: 1000,
+          },
+        ]);
+      }
+      if (command === "load_video_from_url") {
+        return Promise.resolve(loadedVideo());
+      }
+      if (command === "remove_saved_word") {
+        return new Promise((_resolve, reject) => {
+          rejectRemove = reject;
+        });
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    expect(await screen.findByText("Welt")).toBeInTheDocument();
+
+    const removeButton = screen.getByRole("button", { name: "Удалить Welt" });
+    await user.click(removeButton);
+
+    expect(removeButton).toBeDisabled();
+
+    await act(async () => {
+      rejectRemove(new Error("storage failed"));
+    });
+
+    expect(screen.getByRole("region", { name: "Сохраненные слова" })).toHaveTextContent("Welt");
+    expect(await screen.findByText("Не удалось удалить слово")).toBeInTheDocument();
+  });
+
   it("saves a ready lookup word and updates the saved words panel", async () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {

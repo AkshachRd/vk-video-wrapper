@@ -7,10 +7,21 @@ type SavedWordsPanelProps = {
   words: SavedWord[];
   isLoading?: boolean;
   isUnavailable?: boolean;
+  pendingWordIds?: string[];
+  error?: string;
   onRemove: (word: SavedWord) => void;
 };
 
-export function SavedWordsPanel({ words, isLoading, isUnavailable, onRemove }: SavedWordsPanelProps) {
+export function SavedWordsPanel({
+  words,
+  isLoading,
+  isUnavailable,
+  pendingWordIds = [],
+  error,
+  onRemove,
+}: SavedWordsPanelProps) {
+  const pendingWordIdSet = new Set(pendingWordIds);
+
   return (
     <aside
       aria-label="Сохраненные слова"
@@ -22,6 +33,7 @@ export function SavedWordsPanel({ words, isLoading, isUnavailable, onRemove }: S
         <span className="text-xs text-slate-500">{words.length}</span>
       </div>
 
+      {error && !isUnavailable ? <div className="mb-3 text-xs text-red-300">{error}</div> : null}
       {isUnavailable ? <div className="text-sm text-slate-400">Список слов недоступен</div> : null}
       {!isUnavailable && isLoading ? <div className="text-sm text-slate-400">Загружаю слова...</div> : null}
       {!isUnavailable && !isLoading && words.length === 0 ? (
@@ -42,6 +54,7 @@ export function SavedWordsPanel({ words, isLoading, isUnavailable, onRemove }: S
                   variant="ghost"
                   className="h-7 w-7 shrink-0 px-0"
                   aria-label={`Удалить ${word.displayWord}`}
+                  disabled={pendingWordIdSet.has(word.id)}
                   onClick={() => onRemove(word)}
                 >
                   <X className="h-4 w-4" aria-hidden="true" />

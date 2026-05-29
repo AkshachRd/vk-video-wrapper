@@ -27,6 +27,7 @@ const UNKNOWN_LOAD_ERROR = "The video could not be loaded.";
 const SUBTITLE_PARSE_ERROR = "Subtitles could not be parsed for this video.";
 const TRACK_PARSE_ERROR = "Subtitles could not be parsed for this track.";
 const SAVE_WORD_ERROR = "Не удалось сохранить слово";
+const REMOVE_WORD_ERROR = "Не удалось удалить слово";
 
 type PendingSubtitlePause = {
   stopAtMs: number;
@@ -51,6 +52,7 @@ export default function App() {
   const [savedWordsUnavailable, setSavedWordsUnavailable] = useState(false);
   const [pendingSavedWordActions, setPendingSavedWordActions] = useState<Record<string, PendingSavedWordAction>>({});
   const [saveWordErrorKey, setSaveWordErrorKey] = useState<string | undefined>();
+  const [savedWordsPanelError, setSavedWordsPanelError] = useState<string | undefined>();
   const requestIdRef = useRef(0);
   const trackRequestIdRef = useRef(0);
   const lookupRequestIdRef = useRef(0);
@@ -184,6 +186,7 @@ export default function App() {
 
       setPendingSavedWordAction(key, existingWord ? "removing" : "saving");
       setSaveWordErrorKey(undefined);
+      setSavedWordsPanelError(undefined);
 
       try {
         if (existingWord) {
@@ -218,7 +221,7 @@ export default function App() {
     const key = savedWordKey(word.language, word.normalizedWord);
 
     setPendingSavedWordAction(key, "removing");
-    setSaveWordErrorKey(undefined);
+    setSavedWordsPanelError(undefined);
 
     try {
       await invoke("remove_saved_word", {
@@ -230,7 +233,7 @@ export default function App() {
       removedSavedWordKeysRef.current.add(key);
       setSavedWords((words) => words.filter((savedWord) => savedWord.id !== word.id));
     } catch {
-      setSaveWordErrorKey(key);
+      setSavedWordsPanelError(REMOVE_WORD_ERROR);
     } finally {
       clearPendingSavedWordAction(key);
     }
@@ -507,6 +510,10 @@ export default function App() {
               words={savedWords}
               isLoading={areSavedWordsLoading}
               isUnavailable={savedWordsUnavailable}
+              pendingWordIds={savedWords
+                .filter((word) => pendingSavedWordActions[savedWordKey(word.language, word.normalizedWord)] === "removing")
+                .map((word) => word.id)}
+              error={savedWordsPanelError}
               onRemove={handleRemoveSavedWord}
             />
           </div>
