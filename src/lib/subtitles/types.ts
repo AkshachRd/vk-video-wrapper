@@ -46,6 +46,8 @@ export interface LoadedVideo {
   tracks: SubtitleTrack[];
   selectedTrackId: string;
   subtitleText: string;
+  secondaryTrackId?: string;
+  secondarySubtitleText?: string;
 }
 
 export interface LoadedSubtitleTrack {
