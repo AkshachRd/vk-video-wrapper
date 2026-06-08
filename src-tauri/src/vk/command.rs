@@ -166,6 +166,12 @@ mod tests {
         .unwrap();
 
         assert_eq!(value["videoId"]["ownerId"], -1);
+        assert_eq!(value["videoId"]["videoId"], 2);
+        assert_eq!(
+            value["embedUrl"],
+            "https://vk.com/video_ext.php?oid=-1&id=2&hd=2&js_api=1"
+        );
+        assert_eq!(value["tracks"][0]["manifestName"], "Русский");
         assert_eq!(value["selectedTrackId"], "ru_0_ru_auto.vtt");
         assert_eq!(value["subtitleText"], "WEBVTT");
         assert_eq!(value["secondaryTrackId"], "ru_1_ru.vtt");
