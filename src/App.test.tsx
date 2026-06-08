@@ -1675,6 +1675,7 @@ describe("App second subtitle line", () => {
     expect(await screen.findByText("Не удалось загрузить вторую дорожку.")).toBeInTheDocument();
     expect(screen.getByText("секунда один")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bonjour" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Перевод")).toHaveValue("ru");
   });
 
   it("freezes the reference line at the held time when a primary word is inspected", async () => {
