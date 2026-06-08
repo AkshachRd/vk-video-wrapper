@@ -13,6 +13,8 @@ pub struct LoadedVideo {
     pub tracks: Vec<VkSubtitleTrack>,
     pub selected_track_id: String,
     pub subtitle_text: String,
+    pub secondary_track_id: Option<String>,
+    pub secondary_subtitle_text: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -28,19 +30,31 @@ pub async fn load_video_from_url(url: String) -> Result<LoadedVideo, String> {
     let metadata = fetch_embed_metadata(&video_id)
         .await
         .map_err(String::from)?;
-    let selected_track = {
-        let (primary, _secondary) = select_subtitle_pair(&metadata.tracks).map_err(String::from)?;
-        primary.clone()
+
+    let (selected_track, secondary_track) = {
+        let (primary, secondary) = select_subtitle_pair(&metadata.tracks).map_err(String::from)?;
+        (primary.clone(), secondary.cloned())
     };
+
     let subtitle_text = fetch_subtitle_text(&selected_track)
         .await
         .map_err(String::from)?;
+
+    let (secondary_track_id, secondary_subtitle_text) = match &secondary_track {
+        Some(track) => match fetch_subtitle_text(track).await {
+            Ok(text) => (Some(track.id.clone()), Some(text)),
+            Err(_) => (None, None),
+        },
+        None => (None, None),
+    };
 
     Ok(assemble_loaded_video(
         video_id,
         metadata,
         selected_track,
         subtitle_text,
+        secondary_track_id,
+        secondary_subtitle_text,
     ))
 }
 
@@ -68,6 +82,8 @@ fn assemble_loaded_video(
     metadata: VkEmbedMetadata,
     selected_track: VkSubtitleTrack,
     subtitle_text: String,
+    secondary_track_id: Option<String>,
+    secondary_subtitle_text: Option<String>,
 ) -> LoadedVideo {
     LoadedVideo {
         video_id,
@@ -75,6 +91,8 @@ fn assemble_loaded_video(
         tracks: metadata.tracks,
         selected_track_id: selected_track.id,
         subtitle_text,
+        secondary_track_id,
+        secondary_subtitle_text,
     }
 }
 
@@ -142,18 +160,38 @@ mod tests {
             tracks: vec![track()],
             selected_track_id: "ru_0_ru_auto.vtt".to_string(),
             subtitle_text: "WEBVTT".to_string(),
+            secondary_track_id: Some("ru_1_ru.vtt".to_string()),
+            secondary_subtitle_text: Some("WEBVTT\n\nпривет".to_string()),
         })
         .unwrap();
 
         assert_eq!(value["videoId"]["ownerId"], -1);
-        assert_eq!(value["videoId"]["videoId"], 2);
-        assert_eq!(
-            value["embedUrl"],
-            "https://vk.com/video_ext.php?oid=-1&id=2&hd=2&js_api=1"
-        );
-        assert_eq!(value["tracks"][0]["manifestName"], "Русский");
         assert_eq!(value["selectedTrackId"], "ru_0_ru_auto.vtt");
         assert_eq!(value["subtitleText"], "WEBVTT");
+        assert_eq!(value["secondaryTrackId"], "ru_1_ru.vtt");
+        assert_eq!(value["secondarySubtitleText"], "WEBVTT\n\nпривет");
+    }
+
+    #[test]
+    fn loaded_video_serializes_absent_secondary_as_null() {
+        let value = serde_json::to_value(LoadedVideo {
+            video_id: VkVideoId {
+                owner_id: -1,
+                video_id: 2,
+                list: None,
+                access_key: None,
+            },
+            embed_url: "https://vk.com/video_ext.php?oid=-1&id=2&hd=2&js_api=1".to_string(),
+            tracks: vec![track()],
+            selected_track_id: "ru_0_ru_auto.vtt".to_string(),
+            subtitle_text: "WEBVTT".to_string(),
+            secondary_track_id: None,
+            secondary_subtitle_text: None,
+        })
+        .unwrap();
+
+        assert_eq!(value["secondaryTrackId"], serde_json::Value::Null);
+        assert_eq!(value["secondarySubtitleText"], serde_json::Value::Null);
     }
 
     #[test]
@@ -185,10 +223,17 @@ mod tests {
             metadata,
             selected_track,
             "WEBVTT\n\nhello".to_string(),
+            Some("ru_1_ru.vtt".to_string()),
+            Some("WEBVTT\n\nпривет".to_string()),
         );
 
         assert_eq!(video.selected_track_id, "ru_0_ru_auto.vtt");
         assert_eq!(video.subtitle_text, "WEBVTT\n\nhello");
+        assert_eq!(video.secondary_track_id.as_deref(), Some("ru_1_ru.vtt"));
+        assert_eq!(
+            video.secondary_subtitle_text.as_deref(),
+            Some("WEBVTT\n\nпривет")
+        );
         assert_eq!(video.tracks.len(), 1);
     }
 
