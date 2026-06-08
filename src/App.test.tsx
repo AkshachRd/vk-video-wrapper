@@ -1,12 +1,14 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WordLookup } from "@/lib/dictionary/types";
 import type { SavedWord } from "@/lib/saved-words/types";
-import type { LoadedVideo } from "@/lib/subtitles/types";
+import type { LoadedVideo, SubtitleCue } from "@/lib/subtitles/types";
 
 import App from "./App";
+
+// ── shared hoisted state ────────────────────────────────────────────────────
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -15,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   emitTimeUpdate: vi.fn(),
   emitPlaybackStart: vi.fn(),
   readyPlayer: vi.fn(),
+  // secondary-line suite: captures the latest VideoPlayer props
+  playerProps: { current: undefined as undefined | { onTimeUpdate: (ms: number) => void } },
+  parseMap: new Map<string, SubtitleCue[]>(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -22,7 +27,13 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 vi.mock("@/lib/subtitles/parse-webvtt", () => ({
-  parseWebVtt: mocks.parseWebVtt,
+  parseWebVtt: (text: string) => {
+    // secondary-line suite: delegate to parseMap when populated
+    if (mocks.parseMap.size > 0) {
+      return mocks.parseMap.get(text) ?? [];
+    }
+    return mocks.parseWebVtt(text);
+  },
 }));
 
 vi.mock("@/components/video-player", () => ({
@@ -37,12 +48,16 @@ vi.mock("@/components/video-player", () => ({
     onPlaybackStart?: () => void;
     onControlsReady?: (controls: { pause: () => void } | undefined) => void;
   }) => {
+    // secondary-line suite: capture props for direct onTimeUpdate calls
+    mocks.playerProps.current = { onTimeUpdate };
+
+    // existing suite: wire up emit helpers
     mocks.emitTimeUpdate.mockImplementation(onTimeUpdate);
     mocks.emitPlaybackStart.mockImplementation(() => onPlaybackStart?.());
     mocks.readyPlayer.mockImplementation(() => onControlsReady?.({ pause: mocks.pausePlayer }));
 
     return (
-      <div>
+      <div data-testid="video-player">
         <div>Player: {embedUrl}</div>
         <button type="button" onClick={() => onControlsReady?.({ pause: mocks.pausePlayer })}>
           ready player
@@ -60,6 +75,8 @@ vi.mock("@/components/video-player", () => ({
     );
   },
 }));
+
+// ── helpers shared across both suites ──────────────────────────────────────
 
 function loadedVideo(overrides: Partial<LoadedVideo> = {}): LoadedVideo {
   return {
@@ -146,6 +163,8 @@ const frenchTrack: LoadedVideo["tracks"][number] = {
   url: "https://vkvd737.okcdn.ru/fr.vtt",
 };
 
+// ── existing "App" suite ───────────────────────────────────────────────────
+
 describe("App", () => {
   beforeEach(() => {
     mocks.invoke.mockReset();
@@ -154,6 +173,8 @@ describe("App", () => {
     mocks.emitTimeUpdate.mockReset();
     mocks.emitPlaybackStart.mockReset();
     mocks.readyPlayer.mockReset();
+    mocks.playerProps.current = undefined;
+    mocks.parseMap.clear();
     mocks.parseWebVtt.mockImplementation((raw: string) => {
       if (raw.includes("Hallo Welt")) {
         const cues = [
@@ -794,9 +815,9 @@ describe("App", () => {
     const select = await screen.findByRole("combobox", { name: "Subtitles" });
 
     expect(select).toHaveValue("ru_0_ru.vtt");
-    expect(screen.getByRole("option", { name: "Русский" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Deutsch" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "ru_auto.vtt auto" })).toBeInTheDocument();
+    expect(within(select).getByRole("option", { name: "Русский" })).toBeInTheDocument();
+    expect(within(select).getByRole("option", { name: "Deutsch" })).toBeInTheDocument();
+    expect(within(select).getByRole("option", { name: "ru_auto.vtt auto" })).toBeInTheDocument();
   });
 
   it("loads a selected subtitle track and updates rendered words", async () => {
@@ -1476,5 +1497,195 @@ describe("App", () => {
     expect(await screen.findByText("Subtitles could not be parsed for this track.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
+  });
+});
+
+// ── new "App second subtitle line" suite ──────────────────────────────────
+
+const PRIMARY_CUES: SubtitleCue[] = [
+  {
+    id: "p0",
+    startMs: 1000,
+    endMs: 5000,
+    text: "Bonjour le monde",
+    words: [
+      { id: "p0w0", text: "Bonjour", cleanText: "Bonjour" },
+      { id: "p0w1", text: "le", cleanText: "le" },
+      { id: "p0w2", text: "monde", cleanText: "monde" },
+    ],
+  },
+];
+
+const SECONDARY_CUES: SubtitleCue[] = [
+  {
+    id: "s0",
+    startMs: 1000,
+    endMs: 2000,
+    text: "секунда один",
+    words: [{ id: "s0w0", text: "секунда", cleanText: "секунда" }],
+  },
+  {
+    id: "s1",
+    startMs: 2000,
+    endMs: 5000,
+    text: "секунда два",
+    words: [{ id: "s1w0", text: "два", cleanText: "два" }],
+  },
+];
+
+const ENGLISH_CUES: SubtitleCue[] = [
+  {
+    id: "e0",
+    startMs: 1000,
+    endMs: 5000,
+    text: "hello world",
+    words: [{ id: "e0w0", text: "hello", cleanText: "hello" }],
+  },
+];
+
+function makeTrack(id: string, lang: string, manifestName: string) {
+  return { id, lang, title: id, url: "", manifestName, isAuto: false, storageIndex: 0 };
+}
+
+const LOADED_VIDEO: LoadedVideo = {
+  videoId: { ownerId: -1, videoId: 2 },
+  embedUrl: "https://vk.com/video_ext.php?oid=-1&id=2&js_api=1",
+  tracks: [
+    makeTrack("fr", "fr", "Français"),
+    makeTrack("ru", "ru", "Русский"),
+    makeTrack("en", "en", "English"),
+  ],
+  selectedTrackId: "fr",
+  subtitleText: "PRIMARY",
+  secondaryTrackId: "ru",
+  secondarySubtitleText: "SECONDARY_RU",
+};
+
+const TEXT_BY_TRACK: Record<string, string> = {
+  fr: "PRIMARY",
+  ru: "SECONDARY_RU",
+  en: "EN",
+};
+
+type InvokeOverrides = {
+  loadedVideo?: LoadedVideo;
+  failSecondarySwitch?: boolean;
+};
+
+function setupInvoke(overrides: InvokeOverrides = {}) {
+  const video = overrides.loadedVideo ?? LOADED_VIDEO;
+  mocks.invoke.mockImplementation((command: string, args?: { trackId?: string }) => {
+    switch (command) {
+      case "list_saved_words":
+        return Promise.resolve([]);
+      case "load_video_from_url":
+        return Promise.resolve(video);
+      case "load_subtitle_track":
+        if (overrides.failSecondarySwitch) {
+          return Promise.reject(new Error("boom"));
+        }
+        return Promise.resolve({
+          selectedTrackId: args?.trackId,
+          subtitleText: TEXT_BY_TRACK[args?.trackId ?? ""] ?? "",
+        });
+      default:
+        return Promise.reject(new Error(`unexpected command: ${command}`));
+    }
+  });
+}
+
+async function loadAndPlay(timeMs = 1200) {
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+  await user.click(screen.getByRole("button", { name: "Load" }));
+  await screen.findByTestId("video-player");
+  act(() => {
+    mocks.playerProps.current?.onTimeUpdate(timeMs);
+  });
+  return user;
+}
+
+describe("App second subtitle line", () => {
+  beforeEach(() => {
+    mocks.invoke.mockReset();
+    mocks.playerProps.current = undefined;
+    mocks.parseMap.clear();
+    mocks.parseMap.set("PRIMARY", PRIMARY_CUES);
+    mocks.parseMap.set("SECONDARY_RU", SECONDARY_CUES);
+    mocks.parseMap.set("EN", ENGLISH_CUES);
+    setupInvoke();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("auto-picks the Russian reference line and renders it read-only", async () => {
+    render(<App />);
+    await loadAndPlay();
+
+    expect(screen.getByText("секунда один")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "секунда один" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bonjour" })).toBeInTheDocument();
+  });
+
+  it("keeps the primary line interactive", async () => {
+    render(<App />);
+    const user = await loadAndPlay();
+
+    await user.click(screen.getByRole("button", { name: "Bonjour" }));
+
+    expect(screen.getByRole("dialog", { name: "Word details: Bonjour" })).toBeInTheDocument();
+  });
+
+  it("switches the reference line via the Перевод dropdown", async () => {
+    render(<App />);
+    const user = await loadAndPlay();
+
+    await user.selectOptions(screen.getByLabelText("Перевод"), "en");
+
+    expect(await screen.findByText("hello world")).toBeInTheDocument();
+    expect(screen.queryByText("секунда один")).not.toBeInTheDocument();
+    expect(mocks.invoke).toHaveBeenCalledWith("load_subtitle_track", {
+      videoId: LOADED_VIDEO.videoId,
+      trackId: "en",
+    });
+  });
+
+  it("removes the reference line when Нет is selected", async () => {
+    render(<App />);
+    const user = await loadAndPlay();
+
+    await user.selectOptions(screen.getByLabelText("Перевод"), "");
+
+    expect(screen.queryByText("секунда один")).not.toBeInTheDocument();
+    expect(mocks.invoke).not.toHaveBeenCalledWith(
+      "load_subtitle_track",
+      expect.anything(),
+    );
+  });
+
+  it("shows a scoped error and keeps the previous reference line when a switch fails", async () => {
+    render(<App />);
+    setupInvoke({ failSecondarySwitch: true });
+    const user = await loadAndPlay();
+
+    await user.selectOptions(screen.getByLabelText("Перевод"), "en");
+
+    expect(await screen.findByText("Не удалось загрузить вторую дорожку.")).toBeInTheDocument();
+    expect(screen.getByText("секунда один")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bonjour" })).toBeInTheDocument();
+  });
+
+  it("freezes the reference line at the held time when a primary word is inspected", async () => {
+    render(<App />);
+    const user = await loadAndPlay(1200);
+
+    expect(screen.getByText("секунда один")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Bonjour" }));
+
+    expect(await screen.findByText("секунда два")).toBeInTheDocument();
+    expect(screen.queryByText("секунда один")).not.toBeInTheDocument();
   });
 });

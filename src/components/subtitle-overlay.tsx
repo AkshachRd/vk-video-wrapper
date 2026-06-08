@@ -47,40 +47,38 @@ export function SubtitleOverlay({
   if (!cue) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-7 flex justify-center px-8">
-      <div className="pointer-events-auto max-w-4xl rounded-md bg-black/70 px-4 py-3 text-center text-2xl leading-relaxed text-white shadow-lg">
-        {cue.words.map((word) => {
-          const fallbackWord = word.cleanText || word.text;
-          const lookup = lookupForWord(wordLookup, fallbackWord);
-          const saveControl = getWordSaveControl?.(cue, word, fallbackWord, lookup);
+    <div className="pointer-events-auto max-w-4xl rounded-md bg-black/70 px-4 py-3 text-center text-2xl leading-relaxed text-white shadow-lg">
+      {cue.words.map((word) => {
+        const fallbackWord = word.cleanText || word.text;
+        const lookup = lookupForWord(wordLookup, fallbackWord);
+        const saveControl = getWordSaveControl?.(cue, word, fallbackWord, lookup);
 
-          return (
-            <Popover
-              key={word.id}
-              onOpenChange={(open) => {
-                if (open) {
-                  onWordInspect?.(cue, word);
-                  return;
-                }
+        return (
+          <Popover
+            key={word.id}
+            onOpenChange={(open) => {
+              if (open) {
+                onWordInspect?.(cue, word);
+                return;
+              }
 
-                onWordInspectEnd?.();
-              }}
-            >
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="mx-1 rounded-sm px-1 text-white underline-offset-4 transition-colors hover:bg-white/15 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-                >
-                  {word.text}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent aria-label={`Word details: ${fallbackWord}`}>
-                <WordLookupPopover fallbackWord={fallbackWord} lookup={lookup} saveControl={saveControl} />
-              </PopoverContent>
-            </Popover>
-          );
-        })}
-      </div>
+              onWordInspectEnd?.();
+            }}
+          >
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="mx-1 rounded-sm px-1 text-white underline-offset-4 transition-colors hover:bg-white/15 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+              >
+                {word.text}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent aria-label={`Word details: ${fallbackWord}`}>
+              <WordLookupPopover fallbackWord={fallbackWord} lookup={lookup} saveControl={saveControl} />
+            </PopoverContent>
+          </Popover>
+        );
+      })}
     </div>
   );
 }

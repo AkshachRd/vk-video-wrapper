@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SavedWordsPanel } from "@/components/saved-words-panel";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
+import { SubtitleReferenceLine } from "@/components/subtitle-reference-line";
 import { VideoPlayer } from "@/components/video-player";
 import { getSupportedLookupLanguage } from "@/lib/dictionary/supported-lookup-language";
 import type { WordLookup, WordLookupState } from "@/lib/dictionary/types";
@@ -28,6 +29,7 @@ const SUBTITLE_PARSE_ERROR = "Subtitles could not be parsed for this video.";
 const TRACK_PARSE_ERROR = "Subtitles could not be parsed for this track.";
 const SAVE_WORD_ERROR = "Не удалось сохранить слово";
 const REMOVE_WORD_ERROR = "Не удалось удалить слово";
+const SECONDARY_TRACK_ERROR = "Не удалось загрузить вторую дорожку.";
 
 type PendingSubtitlePause = {
   stopAtMs: number;
@@ -46,6 +48,10 @@ export default function App() {
   const [heldSubtitleTimeMs, setHeldSubtitleTimeMs] = useState<number | undefined>();
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [isTrackLoading, setIsTrackLoading] = useState(false);
+  const [secondaryLane, setSecondaryLane] = useState<SubtitleLane | undefined>();
+  const [selectedSecondaryTrackId, setSelectedSecondaryTrackId] = useState("");
+  const [isSecondaryTrackLoading, setIsSecondaryTrackLoading] = useState(false);
+  const [secondaryError, setSecondaryError] = useState<string | undefined>();
   const [wordLookup, setWordLookup] = useState<WordLookupState>({ status: "idle" });
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
   const [areSavedWordsLoading, setAreSavedWordsLoading] = useState(true);
@@ -55,6 +61,7 @@ export default function App() {
   const [savedWordsPanelError, setSavedWordsPanelError] = useState<string | undefined>();
   const requestIdRef = useRef(0);
   const trackRequestIdRef = useRef(0);
+  const secondaryTrackRequestIdRef = useRef(0);
   const lookupRequestIdRef = useRef(0);
   const playerControlsRef = useRef<Pick<VkPlayerControls, "pause"> | undefined>(undefined);
   const pendingSubtitlePauseRef = useRef<PendingSubtitlePause | undefined>(undefined);
@@ -327,6 +334,11 @@ export default function App() {
       setTimeMs(0);
       setHeldSubtitleTimeMs(undefined);
       setSelectedTrackId("");
+      setSecondaryLane(undefined);
+      setSelectedSecondaryTrackId("");
+      setIsSecondaryTrackLoading(false);
+      setSecondaryError(undefined);
+      secondaryTrackRequestIdRef.current += 1;
       pendingSubtitlePauseRef.current = undefined;
 
       let loadedVideo: LoadedVideo;
@@ -372,6 +384,23 @@ export default function App() {
         trackId: loadedVideo.selectedTrackId,
         cues,
       });
+
+      if (loadedVideo.secondaryTrackId && loadedVideo.secondarySubtitleText) {
+        try {
+          const secondaryCues = parseWebVtt(loadedVideo.secondarySubtitleText);
+          if (secondaryCues.length > 0) {
+            setSecondaryLane({
+              role: "secondary",
+              source: "vk-track",
+              trackId: loadedVideo.secondaryTrackId,
+              cues: secondaryCues,
+            });
+            setSelectedSecondaryTrackId(loadedVideo.secondaryTrackId);
+          }
+        } catch {
+          // Opora is optional; ignore a parse failure silently.
+        }
+      }
     },
     [isLoading, resetWordLookup, url],
   );
@@ -447,6 +476,78 @@ export default function App() {
     [isTrackLoading, lane, resetWordLookup, selectedTrackId, video],
   );
 
+  const handleSecondaryTrackChange = useCallback(
+    async (event: ChangeEvent<HTMLSelectElement>) => {
+      const nextTrackId = event.target.value;
+      if (!video || isSecondaryTrackLoading || nextTrackId === selectedSecondaryTrackId) {
+        return;
+      }
+
+      const secondaryRequestId = secondaryTrackRequestIdRef.current + 1;
+      secondaryTrackRequestIdRef.current = secondaryRequestId;
+      setSecondaryError(undefined);
+
+      if (nextTrackId === "") {
+        setSecondaryLane(undefined);
+        setSelectedSecondaryTrackId("");
+        return;
+      }
+
+      setIsSecondaryTrackLoading(true);
+
+      let loadedTrack: LoadedSubtitleTrack;
+
+      try {
+        loadedTrack = await invoke<LoadedSubtitleTrack>("load_subtitle_track", {
+          videoId: video.videoId,
+          trackId: nextTrackId,
+        });
+      } catch {
+        if (secondaryTrackRequestIdRef.current === secondaryRequestId) {
+          setSecondaryError(SECONDARY_TRACK_ERROR);
+          setIsSecondaryTrackLoading(false);
+        }
+        return;
+      }
+
+      if (secondaryTrackRequestIdRef.current !== secondaryRequestId) {
+        return;
+      }
+
+      let secondaryCues: SubtitleLane["cues"];
+
+      try {
+        secondaryCues = parseWebVtt(loadedTrack.subtitleText);
+      } catch {
+        if (secondaryTrackRequestIdRef.current === secondaryRequestId) {
+          setSecondaryError(SECONDARY_TRACK_ERROR);
+          setIsSecondaryTrackLoading(false);
+        }
+        return;
+      }
+
+      if (secondaryCues.length === 0) {
+        if (secondaryTrackRequestIdRef.current === secondaryRequestId) {
+          setSecondaryError(SECONDARY_TRACK_ERROR);
+          setIsSecondaryTrackLoading(false);
+        }
+        return;
+      }
+
+      setSelectedSecondaryTrackId(loadedTrack.selectedTrackId);
+      setSecondaryLane({
+        role: "secondary",
+        source: "vk-track",
+        trackId: loadedTrack.selectedTrackId,
+        cues: secondaryCues,
+      });
+      setIsSecondaryTrackLoading(false);
+    },
+    [isSecondaryTrackLoading, selectedSecondaryTrackId, video],
+  );
+
+  const effectiveTimeMs = heldSubtitleTimeMs ?? timeMs;
+
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100">
       <form className="mx-auto flex max-w-7xl gap-2" onSubmit={handleSubmit}>
@@ -471,22 +572,44 @@ export default function App() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-slate-400">Loaded subtitles</div>
                 {video.tracks.length > 0 ? (
-                  <label className="flex items-center gap-2 text-sm text-slate-300">
-                    <span>Subtitles</span>
-                    <select
-                      aria-label="Subtitles"
-                      value={selectedTrackId}
-                      disabled={isTrackLoading}
-                      onChange={handleTrackChange}
-                      className="h-9 min-w-40 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
-                    >
-                      {video.tracks.map((track) => (
-                        <option key={track.id} value={track.id}>
-                          {formatTrackLabel(track)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                      <span>Subtitles</span>
+                      <select
+                        aria-label="Subtitles"
+                        value={selectedTrackId}
+                        disabled={isTrackLoading}
+                        onChange={handleTrackChange}
+                        className="h-9 min-w-40 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
+                      >
+                        {video.tracks.map((track) => (
+                          <option key={track.id} value={track.id}>
+                            {formatTrackLabel(track)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                      <span>Перевод</span>
+                      <select
+                        aria-label="Перевод"
+                        value={selectedSecondaryTrackId}
+                        disabled={isSecondaryTrackLoading}
+                        onChange={handleSecondaryTrackChange}
+                        className="h-9 min-w-40 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
+                      >
+                        <option value="">Нет</option>
+                        {video.tracks.map((track) => (
+                          <option key={track.id} value={track.id}>
+                            {formatTrackLabel(track)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {secondaryError ? (
+                      <span className="text-sm text-amber-300">{secondaryError}</span>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
               <div className="relative aspect-video overflow-hidden rounded-md border border-slate-800 bg-black">
@@ -496,14 +619,19 @@ export default function App() {
                   onPlaybackStart={handlePlaybackStart}
                   onControlsReady={handlePlayerControlsReady}
                 />
-                <SubtitleOverlay
-                  lane={lane}
-                  timeMs={heldSubtitleTimeMs ?? timeMs}
-                  wordLookup={wordLookup}
-                  onWordInspect={handleSubtitleWordInspect}
-                  onWordInspectEnd={handleSubtitleWordInspectEnd}
-                  getWordSaveControl={getWordSaveControl}
-                />
+                <div className="pointer-events-none absolute inset-x-0 bottom-7 flex flex-col items-center gap-1 px-8">
+                  <SubtitleOverlay
+                    lane={lane}
+                    timeMs={effectiveTimeMs}
+                    wordLookup={wordLookup}
+                    onWordInspect={handleSubtitleWordInspect}
+                    onWordInspectEnd={handleSubtitleWordInspectEnd}
+                    getWordSaveControl={getWordSaveControl}
+                  />
+                  {secondaryLane ? (
+                    <SubtitleReferenceLine lane={secondaryLane} timeMs={effectiveTimeMs} />
+                  ) : null}
+                </div>
               </div>
             </div>
             <SavedWordsPanel
