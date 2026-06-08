@@ -41,7 +41,9 @@ It is read-only: no word clicks, no popover, no dictionary lookup, no saved word
 
 The default pairing chosen by the backend is primary = studied/foreign track, secondary = Russian track. The user can override the secondary via the "Перевод" dropdown or turn it off with "Нет".
 
-Both lines share the same effective playback time, so the held-cue and pause-at-cue-boundary behavior applies to the reference line automatically — it holds and releases in sync with the primary.
+The reference line is aligned to the primary cue, not selected by raw time. The two tracks rarely share identical cue boundaries, so picking the reference cue by time alone makes it drift ahead of or behind the primary line and show the wrong translation. Instead the app picks the reference cue with the greatest time-overlap with the currently active primary cue (`selectAlignedCue`), so both lines switch together. Because the primary cue is computed from the same effective (possibly held) time, the held-cue and pause-at-cue-boundary behavior applies to the reference line automatically.
+
+The reference line keeps a reserved vertical slot even when it has no matching cue, so the primary line stays fixed in place instead of dropping when the reference text is briefly absent.
 
 Secondary load and switch failures show a small scoped inline note. They never clear the video or the primary subtitle lane.
 
