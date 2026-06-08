@@ -3,7 +3,7 @@ use serde::Serialize;
 use super::embed::{fetch_embed_metadata, VkEmbedMetadata, VkSubtitleTrack};
 use super::errors::VkLoadError;
 use super::link_parser::{parse_vk_video_url, VkVideoId};
-use super::subtitles::{fetch_subtitle_text, select_primary_track};
+use super::subtitles::{fetch_subtitle_text, select_subtitle_pair};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,9 +28,10 @@ pub async fn load_video_from_url(url: String) -> Result<LoadedVideo, String> {
     let metadata = fetch_embed_metadata(&video_id)
         .await
         .map_err(String::from)?;
-    let selected_track = select_primary_track(&metadata.tracks)
-        .map_err(String::from)?
-        .clone();
+    let selected_track = {
+        let (primary, _secondary) = select_subtitle_pair(&metadata.tracks).map_err(String::from)?;
+        primary.clone()
+    };
     let subtitle_text = fetch_subtitle_text(&selected_track)
         .await
         .map_err(String::from)?;

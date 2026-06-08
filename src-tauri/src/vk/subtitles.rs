@@ -15,12 +15,20 @@ const ALLOWED_SUBTITLE_HOSTS: &[&str] = &[
     "vkuser.net",
 ];
 
-pub fn select_primary_track(tracks: &[VkSubtitleTrack]) -> Result<&VkSubtitleTrack, VkLoadError> {
-    tracks
+pub fn select_subtitle_pair(
+    tracks: &[VkSubtitleTrack],
+) -> Result<(&VkSubtitleTrack, Option<&VkSubtitleTrack>), VkLoadError> {
+    let primary = tracks
         .iter()
-        .find(|track| track.lang.eq_ignore_ascii_case("ru"))
+        .find(|track| !track.lang.eq_ignore_ascii_case("ru"))
         .or_else(|| tracks.first())
-        .ok_or(VkLoadError::SubtitlesNotFound)
+        .ok_or(VkLoadError::SubtitlesNotFound)?;
+
+    let secondary = tracks
+        .iter()
+        .find(|track| track.lang.eq_ignore_ascii_case("ru") && !std::ptr::eq(*track, primary));
+
+    Ok((primary, secondary))
 }
 
 pub async fn fetch_subtitle_text(track: &VkSubtitleTrack) -> Result<String, VkLoadError> {
@@ -153,21 +161,41 @@ mod tests {
     }
 
     #[test]
-    fn prefers_russian_track() {
-        let tracks = vec![track("en", "en"), track("ru", "ru")];
-        assert_eq!(select_primary_track(&tracks).unwrap().id, "ru");
+    fn prefers_foreign_track_as_primary_and_russian_as_secondary() {
+        let tracks = vec![track("ru", "ru"), track("en", "en")];
+        let (primary, secondary) = select_subtitle_pair(&tracks).unwrap();
+        assert_eq!(primary.id, "en");
+        assert_eq!(secondary.unwrap().id, "ru");
     }
 
     #[test]
-    fn falls_back_to_first_track() {
-        let tracks = vec![track("de", "de"), track("en", "en")];
-        assert_eq!(select_primary_track(&tracks).unwrap().id, "de");
+    fn keeps_track_order_when_picking_primary() {
+        let tracks = vec![track("ru", "ru"), track("en", "en"), track("de", "de")];
+        let (primary, secondary) = select_subtitle_pair(&tracks).unwrap();
+        assert_eq!(primary.id, "en");
+        assert_eq!(secondary.unwrap().id, "ru");
+    }
+
+    #[test]
+    fn russian_only_has_no_secondary() {
+        let tracks = vec![track("ru", "ru")];
+        let (primary, secondary) = select_subtitle_pair(&tracks).unwrap();
+        assert_eq!(primary.id, "ru");
+        assert!(secondary.is_none());
+    }
+
+    #[test]
+    fn no_russian_means_no_secondary() {
+        let tracks = vec![track("en", "en"), track("de", "de")];
+        let (primary, secondary) = select_subtitle_pair(&tracks).unwrap();
+        assert_eq!(primary.id, "en");
+        assert!(secondary.is_none());
     }
 
     #[test]
     fn rejects_empty_tracks() {
         assert!(matches!(
-            select_primary_track(&[]),
+            select_subtitle_pair(&[]),
             Err(VkLoadError::SubtitlesNotFound)
         ));
     }
