@@ -11,6 +11,7 @@ Current MVP behavior:
 - User can choose among VK-provided subtitle tracks with the app dropdown.
 - Clicking a subtitle word opens a small popover showing only that word.
 - After a word click, playback pauses at the end of the current cue and keeps that cue visible until the user closes the popover or resumes playback.
+- User can also enable a second read-only reference line (another VK track) via a separate "Перевод" dropdown; the app auto-selects a Russian track as the reference when one is available.
 
 Detailed context lives in:
 - `docs/llm/product-context.md`
@@ -22,13 +23,13 @@ Detailed context lives in:
 Keep the MVP small:
 - Public videos only.
 - VK-provided subtitles only.
-- One rendered subtitle lane for now.
+- One interactive subtitle lane plus an optional read-only reference lane (both from VK tracks).
 - No VK auth.
 - No machine translation UI yet.
 - No dictionary lookup beyond showing the clicked word.
 - No saved words, account system, search, or local subtitle import.
 
-Future architecture should keep room for a secondary lane from either another VK track or machine translation, but do not expose unfinished controls.
+Future architecture should keep room for a machine-translation secondary lane, but do not expose unfinished controls.
 
 ## Development Commands
 
@@ -73,9 +74,10 @@ Do not change the user's global/default `fnm` configuration unless explicitly as
 ## Codebase Map
 
 Frontend:
-- `src/App.tsx`: top-level app state, load flow, track selection, subtitle hold/pause behavior.
+- `src/App.tsx`: top-level app state, load flow, track selection, subtitle hold/pause behavior; owns secondary lane state and the "Перевод" dropdown.
 - `src/components/video-player.tsx`: VK iframe wrapper and bridge initialization.
 - `src/components/subtitle-overlay.tsx`: active cue rendering, word buttons, popover lifecycle.
+- `src/components/subtitle-reference-line.tsx`: read-only secondary subtitle line (no word clicks, no popover, no dictionary, no saved words).
 - `src/lib/vk-player/vk-player-bridge.ts`: thin wrapper around `VK.VideoPlayer`.
 - `src/lib/subtitles/parse-webvtt.ts`: WebVTT/SRT-ish parsing and VK inline markup cleanup.
 - `src/lib/subtitles/select-active-cue.ts`: active cue lookup by time.
@@ -94,6 +96,7 @@ VK's official video API is not used for subtitles. The app relies on public embe
 - Build/fetch `https://vk.com/video_ext.php?...`.
 - Extract track metadata from embed HTML and, when present, DASH manifests.
 - Download selected subtitle files through the Rust backend because direct browser fetch can hit CORS and signed URL constraints.
+- `select_subtitle_pair` in `src-tauri/src/vk/subtitles.rs` selects a default pair: primary = first non-Russian track (else first track), secondary = first Russian track that differs from the primary (else none). This replaces the old "prefer Russian for the primary" behavior.
 
 Subtitle URLs are temporary and should not be treated as stable stored data.
 

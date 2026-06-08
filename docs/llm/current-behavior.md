@@ -8,9 +8,10 @@
 4. Backend returns embed URL, video id, subtitle tracks, selected track id, and raw subtitle text.
 5. Frontend parses subtitle text into cues and words.
 6. VK iframe is rendered.
-7. App overlay displays the active subtitle cue based on VK player time.
-8. User can switch the app subtitle track with the `Subtitles` dropdown.
-9. User can click a word in the overlay to inspect it.
+7. App overlay displays the active subtitle cue based on VK player time; when a Russian track is available a second read-only reference line is automatically shown below the primary line.
+8. User can switch the primary app subtitle track with the `Subtitles` dropdown.
+9. User can switch or hide the reference line with the `Перевод` dropdown (includes a "Нет" off option and all available tracks).
+10. User can click a word in the primary overlay to inspect it.
 
 ## Subtitle Track Dropdown
 
@@ -31,6 +32,18 @@ When switching tracks:
 - The current subtitle lane stays visible while the new track loads.
 - On success, the app replaces the primary lane with parsed cues from the new track.
 - On failure, the app keeps the old lane and shows an error.
+
+## Second Reference Line
+
+The app renders an optional second subtitle line below the primary interactive line.
+
+It is read-only: no word clicks, no popover, no dictionary lookup, no saved words.
+
+The default pairing chosen by the backend is primary = studied/foreign track, secondary = Russian track. The user can override the secondary via the "Перевод" dropdown or turn it off with "Нет".
+
+Both lines share the same effective playback time, so the held-cue and pause-at-cue-boundary behavior applies to the reference line automatically — it holds and releases in sync with the primary.
+
+Secondary load and switch failures show a small scoped inline note. They never clear the video or the primary subtitle lane.
 
 ## Automatic And Rolling Subtitles
 

@@ -49,6 +49,7 @@ The app can:
 - Pause at the end of the current cue after a word click.
 - Hold the inspected cue visible across late player time updates.
 - Release the held cue when the popover closes or playback resumes.
+- Render an optional second read-only reference line in another VK track (auto-selected Russian when available, switchable or dismissible via "Перевод" dropdown).
 
 ## Non-Goals For Now
 
@@ -90,9 +91,9 @@ Backend steps:
 2. Fetch VK embed HTML.
 3. Extract video/player metadata and subtitle track metadata.
 4. Optionally fetch and parse DASH manifest metadata for extra tracks.
-5. Select a default track, currently preferring Russian when available.
-6. Download that subtitle file.
-7. Return loaded video metadata, all known tracks, selected track id, embed URL, and raw subtitle text.
+5. Select a default track pair via `select_subtitle_pair`: primary = first non-Russian track (else first track), secondary = first Russian track differing from the primary (else none).
+6. Download the primary subtitle file; attempt to download the secondary (failure is non-fatal — `secondaryTrackId` and `secondarySubtitleText` will be null).
+7. Return loaded video metadata, all known tracks, selected primary track id, optional secondary track id, embed URL, and raw subtitle texts.
 
 Track switching uses:
 
@@ -118,7 +119,7 @@ Frontend flow:
 
 ## Data Model Direction
 
-The current UI renders one lane, but the model keeps room for future dual subtitles:
+The UI renders two lanes: a primary interactive lane and an optional read-only reference lane. The model already captures this with:
 
 ```ts
 type SubtitleLane = {
@@ -129,7 +130,7 @@ type SubtitleLane = {
 };
 ```
 
-Do not remove this future-facing shape unless the product direction changes.
+Both current lanes use `source: "vk-track"`. The `machine-translation` source is reserved for a future non-goal and should not be wired up without a product decision.
 
 ## Known VK Video Examples
 
