@@ -47,6 +47,10 @@ The reference line keeps a reserved vertical slot even when it has no matching c
 
 Secondary load and switch failures show a small scoped inline note. They never clear the video or the primary subtitle lane.
 
+## Fullscreen
+
+The app overlay lives outside the VK iframe, so VK's own fullscreen button (which makes only the cross-origin iframe fullscreen) cannot carry the overlay into the browser top layer. The app therefore provides its own fullscreen button in the top-right corner of the player that requests fullscreen on the app's player container, which holds both the iframe and the overlay, so subtitles stay visible. While fullscreen, the word popover is portaled into that container instead of `document.body`, otherwise it would render outside the top layer and be invisible. VK's native fullscreen button still works but shows only the VK player without the app overlay.
+
 ## Automatic And Rolling Subtitles
 
 VK automatic subtitles can arrive as WebVTT with inline timestamp/cue markup, for example timestamp tags around words.
