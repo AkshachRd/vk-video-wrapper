@@ -1506,41 +1506,37 @@ const PRIMARY_CUES: SubtitleCue[] = [
   {
     id: "p0",
     startMs: 1000,
-    endMs: 5000,
-    text: "Bonjour le monde",
+    endMs: 3000,
+    text: "Hallo Max wie",
     words: [
-      { id: "p0w0", text: "Bonjour", cleanText: "Bonjour" },
-      { id: "p0w1", text: "le", cleanText: "le" },
-      { id: "p0w2", text: "monde", cleanText: "monde" },
+      { id: "p0w0", text: "Hallo", cleanText: "Hallo" },
+      { id: "p0w1", text: "Max", cleanText: "Max" },
+      { id: "p0w2", text: "wie", cleanText: "wie" },
+    ],
+  },
+  {
+    id: "p1",
+    startMs: 3000,
+    endMs: 5000,
+    text: "geht es dir",
+    words: [
+      { id: "p1w0", text: "geht", cleanText: "geht" },
+      { id: "p1w1", text: "es", cleanText: "es" },
+      { id: "p1w2", text: "dir", cleanText: "dir" },
     ],
   },
 ];
 
+// Russian cue boundaries are intentionally shifted relative to the German ones,
+// so that raw-time selection would drift (e.g. at 2900ms the naive pick is r1
+// while the German line is still p0). Alignment must follow the primary cue.
 const SECONDARY_CUES: SubtitleCue[] = [
-  {
-    id: "s0",
-    startMs: 1000,
-    endMs: 2000,
-    text: "секунда один",
-    words: [{ id: "s0w0", text: "секунда", cleanText: "секунда" }],
-  },
-  {
-    id: "s1",
-    startMs: 2000,
-    endMs: 5000,
-    text: "секунда два",
-    words: [{ id: "s1w0", text: "два", cleanText: "два" }],
-  },
+  { id: "r0", startMs: 900, endMs: 2800, text: "Привет Макс", words: [] },
+  { id: "r1", startMs: 2800, endMs: 4900, text: "Как дела", words: [] },
 ];
 
 const ENGLISH_CUES: SubtitleCue[] = [
-  {
-    id: "e0",
-    startMs: 1000,
-    endMs: 5000,
-    text: "hello world",
-    words: [{ id: "e0w0", text: "hello", cleanText: "hello" }],
-  },
+  { id: "e0", startMs: 900, endMs: 2800, text: "hello there", words: [] },
 ];
 
 function makeTrack(id: string, lang: string, manifestName: string) {
@@ -1594,7 +1590,7 @@ function setupInvoke(overrides: InvokeOverrides = {}) {
   });
 }
 
-async function loadAndPlay(timeMs = 1200) {
+async function loadAndPlay(timeMs = 2000) {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
   await user.click(screen.getByRole("button", { name: "Load" }));
@@ -1624,18 +1620,76 @@ describe("App second subtitle line", () => {
     render(<App />);
     await loadAndPlay();
 
-    expect(screen.getByText("секунда один")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "секунда один" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Bonjour" })).toBeInTheDocument();
+    expect(screen.getByText("Привет Макс")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Привет Макс" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hallo" })).toBeInTheDocument();
   });
 
   it("keeps the primary line interactive", async () => {
     render(<App />);
     const user = await loadAndPlay();
 
-    await user.click(screen.getByRole("button", { name: "Bonjour" }));
+    await user.click(screen.getByRole("button", { name: "Hallo" }));
 
-    expect(screen.getByRole("dialog", { name: "Word details: Bonjour" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Word details: Hallo" })).toBeInTheDocument();
+  });
+
+  it("aligns the reference line to the primary cue rather than raw playback time", async () => {
+    render(<App />);
+    // 2900ms is still inside the German cue p0, but lands inside the Russian
+    // cue r1 by raw time. The reference must show p0's translation (r0).
+    await loadAndPlay(2900);
+
+    expect(screen.getByText("Привет Макс")).toBeInTheDocument();
+    expect(screen.queryByText("Как дела")).not.toBeInTheDocument();
+  });
+
+  it("moves the reference line in step with the primary cue", async () => {
+    render(<App />);
+    await loadAndPlay(2000);
+
+    expect(screen.getByText("Привет Макс")).toBeInTheDocument();
+
+    act(() => {
+      mocks.playerProps.current?.onTimeUpdate(3500);
+    });
+
+    expect(await screen.findByText("Как дела")).toBeInTheDocument();
+    expect(screen.queryByText("Привет Макс")).not.toBeInTheDocument();
+  });
+
+  it("holds the reference line on the held primary cue while a word is inspected", async () => {
+    render(<App />);
+    const user = await loadAndPlay(2000);
+
+    expect(screen.getByText("Привет Макс")).toBeInTheDocument();
+
+    // Inspecting a word holds playback at the end of the current German cue.
+    await user.click(screen.getByRole("button", { name: "Hallo" }));
+
+    // A late tick past the cue boundary must not advance the reference line.
+    act(() => {
+      mocks.playerProps.current?.onTimeUpdate(3500);
+    });
+
+    expect(screen.getByText("Привет Макс")).toBeInTheDocument();
+    expect(screen.queryByText("Как дела")).not.toBeInTheDocument();
+  });
+
+  it("reserves the reference line slot so the primary line stays in place", async () => {
+    // A Russian track whose only cue does not overlap the current German cue:
+    // the reference text is absent, but its slot must remain to avoid the
+    // primary line dropping into its place.
+    mocks.parseMap.set("SECONDARY_RU", [
+      { id: "far", startMs: 8000, endMs: 9000, text: "далеко", words: [] },
+    ]);
+
+    render(<App />);
+    await loadAndPlay(2000);
+
+    expect(screen.getByRole("button", { name: "Hallo" })).toBeInTheDocument();
+    expect(screen.getByTestId("secondary-subtitle-slot")).toBeInTheDocument();
+    expect(screen.queryByText("далеко")).not.toBeInTheDocument();
   });
 
   it("switches the reference line via the Перевод dropdown", async () => {
@@ -1644,8 +1698,8 @@ describe("App second subtitle line", () => {
 
     await user.selectOptions(screen.getByLabelText("Перевод"), "en");
 
-    expect(await screen.findByText("hello world")).toBeInTheDocument();
-    expect(screen.queryByText("секунда один")).not.toBeInTheDocument();
+    expect(await screen.findByText("hello there")).toBeInTheDocument();
+    expect(screen.queryByText("Привет Макс")).not.toBeInTheDocument();
     expect(mocks.invoke).toHaveBeenCalledWith("load_subtitle_track", {
       videoId: LOADED_VIDEO.videoId,
       trackId: "en",
@@ -1658,7 +1712,8 @@ describe("App second subtitle line", () => {
 
     await user.selectOptions(screen.getByLabelText("Перевод"), "");
 
-    expect(screen.queryByText("секунда один")).not.toBeInTheDocument();
+    expect(screen.queryByText("Привет Макс")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("secondary-subtitle-slot")).not.toBeInTheDocument();
     expect(mocks.invoke).not.toHaveBeenCalledWith(
       "load_subtitle_track",
       expect.anything(),
@@ -1673,20 +1728,8 @@ describe("App second subtitle line", () => {
     await user.selectOptions(screen.getByLabelText("Перевод"), "en");
 
     expect(await screen.findByText("Не удалось загрузить вторую дорожку.")).toBeInTheDocument();
-    expect(screen.getByText("секунда один")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Bonjour" })).toBeInTheDocument();
+    expect(screen.getByText("Привет Макс")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hallo" })).toBeInTheDocument();
     expect(screen.getByLabelText("Перевод")).toHaveValue("ru");
-  });
-
-  it("freezes the reference line at the held time when a primary word is inspected", async () => {
-    render(<App />);
-    const user = await loadAndPlay(1200);
-
-    expect(screen.getByText("секунда один")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Bonjour" }));
-
-    expect(await screen.findByText("секунда два")).toBeInTheDocument();
-    expect(screen.queryByText("секунда один")).not.toBeInTheDocument();
   });
 });

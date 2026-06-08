@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { SubtitleLane } from "@/lib/subtitles/types";
+import type { SubtitleCue, SubtitleLane } from "@/lib/subtitles/types";
 
 import { SubtitleReferenceLine } from "./subtitle-reference-line";
 
@@ -9,41 +9,47 @@ const lane: SubtitleLane = {
   role: "secondary",
   source: "vk-track",
   cues: [
-    {
-      id: "c0",
-      startMs: 1000,
-      endMs: 5000,
-      text: "Я сегодня иду в кино",
-      words: [
-        { id: "c0w0", text: "Я", cleanText: "я" },
-        { id: "c0w1", text: "сегодня", cleanText: "сегодня" },
-      ],
-    },
-    {
-      id: "c1",
-      startMs: 6000,
-      endMs: 7000,
-      text: "Завтра тоже",
-      words: [{ id: "c1w0", text: "Завтра", cleanText: "завтра" }],
-    },
+    { id: "s0", startMs: 900, endMs: 2800, text: "Привет Макс", words: [] },
+    { id: "s1", startMs: 2800, endMs: 4900, text: "Как дела", words: [] },
   ],
 };
 
-describe("SubtitleReferenceLine", () => {
-  it("renders the active cue as plain text", () => {
-    render(<SubtitleReferenceLine lane={lane} timeMs={1200} />);
+function primaryCue(startMs: number, endMs: number): SubtitleCue {
+  return { id: "p", startMs, endMs, text: "primary", words: [] };
+}
 
-    expect(screen.getByText("Я сегодня иду в кино")).toBeInTheDocument();
+describe("SubtitleReferenceLine", () => {
+  it("renders the reference cue aligned to the primary cue, not raw time", () => {
+    // The primary cue [1000,3000] best overlaps s0, even though raw time near
+    // its end (e.g. 2900) would naively land inside s1.
+    render(<SubtitleReferenceLine lane={lane} primaryCue={primaryCue(1000, 3000)} />);
+
+    expect(screen.getByText("Привет Макс")).toBeInTheDocument();
+    expect(screen.queryByText("Как дела")).not.toBeInTheDocument();
+  });
+
+  it("switches with the primary cue", () => {
+    render(<SubtitleReferenceLine lane={lane} primaryCue={primaryCue(3000, 5000)} />);
+
+    expect(screen.getByText("Как дела")).toBeInTheDocument();
   });
 
   it("does not render clickable word buttons", () => {
-    render(<SubtitleReferenceLine lane={lane} timeMs={1200} />);
+    render(<SubtitleReferenceLine lane={lane} primaryCue={primaryCue(1000, 3000)} />);
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("renders nothing when no cue is active", () => {
-    const { container } = render(<SubtitleReferenceLine lane={lane} timeMs={800} />);
+  it("renders nothing when there is no primary cue", () => {
+    const { container } = render(<SubtitleReferenceLine lane={lane} primaryCue={undefined} />);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders nothing when no reference cue overlaps the primary cue", () => {
+    const { container } = render(
+      <SubtitleReferenceLine lane={lane} primaryCue={primaryCue(8000, 9000)} />,
+    );
 
     expect(container).toBeEmptyDOMElement();
   });

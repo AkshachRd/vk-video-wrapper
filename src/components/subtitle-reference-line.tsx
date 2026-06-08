@@ -1,13 +1,13 @@
-import { selectActiveCue } from "@/lib/subtitles/select-active-cue";
-import type { SubtitleLane } from "@/lib/subtitles/types";
+import { selectAlignedCue } from "@/lib/subtitles/select-aligned-cue";
+import type { SubtitleCue, SubtitleLane } from "@/lib/subtitles/types";
 
 type SubtitleReferenceLineProps = {
   lane: SubtitleLane;
-  timeMs: number;
+  primaryCue: SubtitleCue | undefined;
 };
 
-export function SubtitleReferenceLine({ lane, timeMs }: SubtitleReferenceLineProps) {
-  const cue = selectActiveCue(lane.cues, timeMs);
+export function SubtitleReferenceLine({ lane, primaryCue }: SubtitleReferenceLineProps) {
+  const cue = primaryCue ? selectAlignedCue(lane.cues, primaryCue) : undefined;
   if (!cue) return null;
 
   return (

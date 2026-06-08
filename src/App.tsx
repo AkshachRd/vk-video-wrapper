@@ -13,6 +13,7 @@ import type { WordLookup, WordLookupState } from "@/lib/dictionary/types";
 import { normalizeSavedWord } from "@/lib/saved-words/normalize-saved-word";
 import type { SavedWord, SaveWordRequest, WordSaveControl } from "@/lib/saved-words/types";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
+import { selectActiveCue } from "@/lib/subtitles/select-active-cue";
 import type { LoadedSubtitleTrack, LoadedVideo, SubtitleCue, SubtitleLane, SubtitleTrack, SubtitleWord } from "@/lib/subtitles/types";
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
 
@@ -547,6 +548,7 @@ export default function App() {
   );
 
   const effectiveTimeMs = heldSubtitleTimeMs ?? timeMs;
+  const primaryCue = lane ? selectActiveCue(lane.cues, effectiveTimeMs) : undefined;
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100">
@@ -629,7 +631,12 @@ export default function App() {
                     getWordSaveControl={getWordSaveControl}
                   />
                   {secondaryLane ? (
-                    <SubtitleReferenceLine lane={secondaryLane} timeMs={effectiveTimeMs} />
+                    <div
+                      data-testid="secondary-subtitle-slot"
+                      className="flex min-h-10 justify-center"
+                    >
+                      <SubtitleReferenceLine lane={secondaryLane} primaryCue={primaryCue} />
+                    </div>
                   ) : null}
                 </div>
               </div>
