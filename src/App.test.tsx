@@ -1733,3 +1733,56 @@ describe("App second subtitle line", () => {
     expect(screen.getByLabelText("Перевод")).toHaveValue("ru");
   });
 });
+
+describe("App fullscreen", () => {
+  beforeEach(() => {
+    mocks.invoke.mockReset();
+    mocks.playerProps.current = undefined;
+    mocks.parseMap.clear();
+    mocks.parseMap.set("PRIMARY", PRIMARY_CUES);
+    mocks.parseMap.set("SECONDARY_RU", SECONDARY_CUES);
+    setupInvoke();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("requests fullscreen on the player container and reflects fullscreen state", async () => {
+    const requestFullscreen = vi.fn();
+    const exitFullscreen = vi.fn();
+    const originalRequest = Element.prototype.requestFullscreen;
+    const originalExit = document.exitFullscreen;
+    Element.prototype.requestFullscreen =
+      requestFullscreen as typeof Element.prototype.requestFullscreen;
+    document.exitFullscreen = exitFullscreen as typeof document.exitFullscreen;
+
+    try {
+      render(<App />);
+      const user = await loadAndPlay();
+
+      const container = screen.getByTestId("player-container");
+
+      await user.click(screen.getByRole("button", { name: "Fullscreen" }));
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+
+      Object.defineProperty(document, "fullscreenElement", {
+        configurable: true,
+        value: container,
+      });
+      act(() => {
+        document.dispatchEvent(new Event("fullscreenchange"));
+      });
+
+      await user.click(screen.getByRole("button", { name: "Exit fullscreen" }));
+      expect(exitFullscreen).toHaveBeenCalledTimes(1);
+    } finally {
+      Element.prototype.requestFullscreen = originalRequest;
+      document.exitFullscreen = originalExit;
+      Object.defineProperty(document, "fullscreenElement", {
+        configurable: true,
+        value: null,
+      });
+    }
+  });
+});

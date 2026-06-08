@@ -17,6 +17,7 @@ type SubtitleOverlayProps = {
     fallbackWord: string,
     lookup: WordLookupState,
   ) => WordSaveControl | undefined;
+  popoverContainer?: HTMLElement | null;
 };
 
 const IDLE_WORD_LOOKUP: WordLookupState = { status: "idle" };
@@ -42,6 +43,7 @@ export function SubtitleOverlay({
   onWordInspect,
   onWordInspectEnd,
   getWordSaveControl,
+  popoverContainer,
 }: SubtitleOverlayProps) {
   const cue = selectActiveCue(lane.cues, timeMs);
   if (!cue) return null;
@@ -73,7 +75,7 @@ export function SubtitleOverlay({
                 {word.text}
               </button>
             </PopoverTrigger>
-            <PopoverContent aria-label={`Word details: ${fallbackWord}`}>
+            <PopoverContent aria-label={`Word details: ${fallbackWord}`} container={popoverContainer}>
               <WordLookupPopover fallbackWord={fallbackWord} lookup={lookup} saveControl={saveControl} />
             </PopoverContent>
           </Popover>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Maximize2, Minimize2 } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { normalizeSavedWord } from "@/lib/saved-words/normalize-saved-word";
 import type { SavedWord, SaveWordRequest, WordSaveControl } from "@/lib/saved-words/types";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
 import { selectActiveCue } from "@/lib/subtitles/select-active-cue";
+import { cn } from "@/lib/utils";
 import type { LoadedSubtitleTrack, LoadedVideo, SubtitleCue, SubtitleLane, SubtitleTrack, SubtitleWord } from "@/lib/subtitles/types";
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
 
@@ -53,6 +55,8 @@ export default function App() {
   const [selectedSecondaryTrackId, setSelectedSecondaryTrackId] = useState("");
   const [isSecondaryTrackLoading, setIsSecondaryTrackLoading] = useState(false);
   const [secondaryError, setSecondaryError] = useState<string | undefined>();
+  const [playerContainer, setPlayerContainer] = useState<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [wordLookup, setWordLookup] = useState<WordLookupState>({ status: "idle" });
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
   const [areSavedWordsLoading, setAreSavedWordsLoading] = useState(true);
@@ -547,6 +551,24 @@ export default function App() {
     [isSecondaryTrackLoading, selectedSecondaryTrackId, video],
   );
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === playerContainer);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, [playerContainer]);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+      return;
+    }
+
+    void playerContainer?.requestFullscreen();
+  }, [playerContainer]);
+
   const effectiveTimeMs = heldSubtitleTimeMs ?? timeMs;
   const primaryCue = lane ? selectActiveCue(lane.cues, effectiveTimeMs) : undefined;
 
@@ -614,7 +636,14 @@ export default function App() {
                   </div>
                 ) : null}
               </div>
-              <div className="relative aspect-video overflow-hidden rounded-md border border-slate-800 bg-black">
+              <div
+                ref={setPlayerContainer}
+                data-testid="player-container"
+                className={cn(
+                  "relative aspect-video overflow-hidden bg-black",
+                  isFullscreen ? "" : "rounded-md border border-slate-800",
+                )}
+              >
                 <VideoPlayer
                   embedUrl={video.embedUrl}
                   onTimeUpdate={handleTimeUpdate}
@@ -629,6 +658,7 @@ export default function App() {
                     onWordInspect={handleSubtitleWordInspect}
                     onWordInspectEnd={handleSubtitleWordInspectEnd}
                     getWordSaveControl={getWordSaveControl}
+                    popoverContainer={isFullscreen ? playerContainer : undefined}
                   />
                   {secondaryLane ? (
                     <div
@@ -639,6 +669,19 @@ export default function App() {
                     </div>
                   ) : null}
                 </div>
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                  title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                  className="absolute right-2 top-2 rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                >
+                  {isFullscreen ? (
+                    <Minimize2 className="h-5 w-5" aria-hidden="true" />
+                  ) : (
+                    <Maximize2 className="h-5 w-5" aria-hidden="true" />
+                  )}
+                </button>
               </div>
             </div>
             <SavedWordsPanel

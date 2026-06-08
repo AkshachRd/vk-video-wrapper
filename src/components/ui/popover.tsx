@@ -7,9 +7,11 @@ export const PopoverTrigger = PopoverPrimitive.Trigger;
 
 export const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
->(({ className, align = "center", sideOffset = 6, ...props }, ref) => (
-  <PopoverPrimitive.Portal>
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> & {
+    container?: HTMLElement | null;
+  }
+>(({ className, align = "center", sideOffset = 6, container, ...props }, ref) => (
+  <PopoverPrimitive.Portal container={container ?? undefined}>
     <PopoverPrimitive.Content
       ref={ref}
       align={align}
