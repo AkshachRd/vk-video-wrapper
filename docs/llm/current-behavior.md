@@ -13,6 +13,14 @@
 9. User can switch or hide the reference line with the `Перевод` dropdown (includes a "Нет" off option and all available tracks).
 10. User can click a word in the primary overlay to inspect it.
 
+## Recently Watched
+
+The start screen (when no video is loaded) shows a "Недавние" grid of recently watched videos under the URL form.
+
+Each card shows a best-effort thumbnail and title (parsed from embed `og:image`/`og:title`, falling back to `md_title` and a `video{owner}_{id}` label) plus a relative "last watched" date. Clicking a card reloads that video through the same load path as the URL form. A per-card "×" removes one entry. A "← К списку" control returns from a loaded video to the start screen.
+
+History is automatic: every successful load is recorded via `record_recent_video` (best-effort; a failure never disturbs playback). Entries are deduplicated by `{ownerId}_{videoId}`, ordered by last watched, and capped at the newest 24. Storage is SQLite (`recent-videos.sqlite3`), mirroring saved words; an unavailable store shows "История недоступна" and never blocks video loading.
+
 ## Subtitle Track Dropdown
 
 The dropdown controls only the app overlay.

@@ -83,6 +83,9 @@ Frontend:
 - `src/lib/subtitles/parse-webvtt.ts`: WebVTT/SRT-ish parsing and VK inline markup cleanup.
 - `src/lib/subtitles/select-active-cue.ts`: active cue lookup by time.
 - `src/lib/subtitles/types.ts`: subtitle and loaded-video contracts.
+- `src/components/recent-videos-list.tsx`: start-screen grid of recently watched videos (thumbnail, title, relative date, remove control).
+- `src/lib/recent-videos/types.ts`: recent-video contracts.
+- `src/lib/recent-videos/format-relative-date.ts`: relative "last watched" date formatting.
 
 Backend:
 - `src-tauri/src/vk/link_parser.rs`: VK video URL parsing.
@@ -90,6 +93,7 @@ Backend:
 - `src-tauri/src/vk/subtitles.rs`: subtitle URL validation and download.
 - `src-tauri/src/vk/command.rs`: Tauri commands and loaded-video assembly.
 - `src-tauri/src/vk/errors.rs`: error mapping.
+- `src-tauri/src/recent_videos.rs`: SQLite store and Tauri commands for recently watched videos.
 
 ## VK Integration Facts
 

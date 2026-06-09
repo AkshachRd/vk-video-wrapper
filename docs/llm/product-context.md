@@ -51,6 +51,7 @@ The app can:
 - Release the held cue when the popover closes or playback resumes.
 - Render an optional second read-only reference line in another VK track (auto-selected Russian when available, switchable or dismissible via "Перевод" dropdown).
 - Render a custom player control bar (play/pause, seek, time, volume/mute) over the VK iframe and cover VK's native chrome during normal playback (`clean` mode), with a corner-button toggle into VK's native UI (`vk` mode) for speed and quality settings unreachable via the JS API.
+- Record an automatic "recently watched" list (SQLite) and reopen a video by clicking a start-screen card instead of pasting a URL.
 
 ## Non-Goals For Now
 
@@ -60,7 +61,7 @@ Do not add unless explicitly requested:
 - Machine translation UI.
 - Dictionary APIs.
 - Lemmas, examples, pronunciation, or word notes.
-- Saved vocabulary/history.
+- Cloud-synced or cross-device history (local recently-watched history is now in scope; resume position and favorites/pinning are not).
 - Local subtitle file import.
 - Manual subtitle editing.
 - Controlling the VK player's own subtitle menu.
