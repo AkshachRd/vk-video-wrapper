@@ -74,11 +74,12 @@ Do not change the user's global/default `fnm` configuration unless explicitly as
 ## Codebase Map
 
 Frontend:
-- `src/App.tsx`: top-level app state, load flow, track selection, subtitle hold/pause behavior; owns secondary lane state and the "Перевод" dropdown.
+- `src/App.tsx`: top-level app state, load flow, track selection, subtitle hold/pause behavior; owns secondary lane state and the "Перевод" dropdown; owns player state and clean/vk/ad mode switching.
+- `src/components/player-controls.tsx`: custom player control bar (play/pause, seek bar, time display, volume/mute).
 - `src/components/video-player.tsx`: VK iframe wrapper and bridge initialization.
 - `src/components/subtitle-overlay.tsx`: active cue rendering, word buttons, popover lifecycle.
 - `src/components/subtitle-reference-line.tsx`: read-only secondary subtitle line (no word clicks, no popover, no dictionary, no saved words).
-- `src/lib/vk-player/vk-player-bridge.ts`: thin wrapper around `VK.VideoPlayer`.
+- `src/lib/vk-player/vk-player-bridge.ts`: thin wrapper around `VK.VideoPlayer`; exposes play/pause/seek/setVolume/mute/unmute and events timeupdate/started/resumed/paused/ended/volumechange/adStarted/adCompleted.
 - `src/lib/subtitles/parse-webvtt.ts`: WebVTT/SRT-ish parsing and VK inline markup cleanup.
 - `src/lib/subtitles/select-active-cue.ts`: active cue lookup by time.
 - `src/lib/subtitles/types.ts`: subtitle and loaded-video contracts.
@@ -101,6 +102,16 @@ VK's official video API is not used for subtitles. The app relies on public embe
 Subtitle URLs are temporary and should not be treated as stable stored data.
 
 Accepted subtitle hosts are intentionally allowlisted in the backend. Do not relax this without tests and a clear reason.
+
+### VK.VideoPlayer JS API Surface (confirmed)
+
+Methods available through the bridge:
+`play`, `pause`, `seek(ms)`, `setVolume(0–1)`, `getVolume()`, `mute()`, `unmute()`, `isMuted()`, `getCurrentTime()`, `getDuration()`, `getQuality()`, `getState()`, `on(event, handler)`, `off(event, handler)`, `destroy()`.
+
+Events fired by VK:
+`inited`, `timeupdate`, `volumechange`, `qualitychange`, `started`, `resumed`, `paused`, `seeked`, `ended`, `error`, `adStarted`, `adCompleted`, `fullscreenEnter`, `fullscreenExit`, `recommendationsLoaded`, `recommendationsClicked`.
+
+**There is NO speed/rate method and NO `setQuality` — quality is read-only via `getQuality`.** Playback speed and quality are accessible only through VK's own gear menu (reachable in `vk` mode).
 
 ## Testing Expectations
 

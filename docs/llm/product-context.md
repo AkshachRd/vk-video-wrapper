@@ -50,6 +50,7 @@ The app can:
 - Hold the inspected cue visible across late player time updates.
 - Release the held cue when the popover closes or playback resumes.
 - Render an optional second read-only reference line in another VK track (auto-selected Russian when available, switchable or dismissible via "Перевод" dropdown).
+- Render a custom player control bar (play/pause, seek, time, volume/mute) over the VK iframe and cover VK's native chrome during normal playback (`clean` mode), with a corner-button toggle into VK's native UI (`vk` mode) for speed and quality settings unreachable via the JS API.
 
 ## Non-Goals For Now
 
@@ -64,6 +65,8 @@ Do not add unless explicitly requested:
 - Manual subtitle editing.
 - Controlling the VK player's own subtitle menu.
 - Persistent user preferences.
+- In-app playback speed or quality controls (no set-speed/setQuality in the VK JS API; reachable only via VK's native gear menu).
+- Picture-in-picture (API-limited in the cross-origin iframe context).
 
 ## Architecture Overview
 

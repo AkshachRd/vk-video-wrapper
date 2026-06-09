@@ -96,21 +96,46 @@ A held cue should be released when:
 
 The held cue should not be released by a `started` or `resumed` event that happens before the cue boundary pause has fired. Otherwise, the planned pause at the end of the cue would be cancelled.
 
+## Custom Player Chrome
+
+The app renders its own control bar over the VK iframe. Controls: play/pause button, elapsed/total time display (H:MM:SS or M:SS format), seek bar, volume slider, and mute toggle. The component is `src/components/player-controls.tsx`; playback is driven through the VK `VideoPlayer` JS API via `src/lib/vk-player/vk-player-bridge.ts`.
+
+`src/App.tsx` owns player state and three operating modes:
+
+- **clean** (default): the iframe has `pointer-events: none`, so VK's own control bar, hover chrome, and logo are covered by the app's overlay and unreachable. The app's control bar and subtitle overlay are visible.
+- **vk**: toggled by a corner gear button (top-right). Restores iframe pointer events and hides the app control bar so the user can reach VK's native gear menu for playback speed and quality. Toggling back returns to clean mode.
+- **ad** (automatic): when VK fires `adStarted` the app steps aside — iframe pointer events are restored and the app chrome is hidden so the ad's own controls are reachable. On `adCompleted` the app restores clean mode automatically.
+
+Corner buttons in the top-right (visible when not in an ad): the VK-mode toggle (gear icon / X to return) and a fullscreen toggle.
+
+**Confirmed limitations:**
+- Playback speed and quality are not exposed by the VK JS API (only `getQuality` read-only). They are reachable only through VK's native gear menu, which is why the vk-mode toggle exists.
+- VK's "Watch also" recommendations card and ad creatives render inside the cross-origin iframe and cannot be removed via the API. Clean mode only blocks mouse clicks on them; it does not hide them.
+
+**Phase 2 (planned next):** learning-oriented controls — replay cue, seek-by-cue, keyboard shortcuts.
+
 ## VK Player Bridge Events
 
-The frontend bridge currently uses these VK player events:
+The bridge listens to and exposes the following VK player events:
 
 ```text
-timeupdate
-started
-resumed
+timeupdate   — current position in ms
+started      — playback first started
+resumed      — playback resumed after pause
+paused       — playback paused
+ended        — video ended
+volumechange — volume or mute state changed
+adStarted    — VK ad began (app steps aside)
+adCompleted  — VK ad finished (app restores clean mode)
 ```
 
-`timeupdate` updates current playback time in milliseconds.
+`timeupdate` drives active cue selection.
 
-`started` and `resumed` are used to release a held inspected subtitle after the user continues playback.
+`started` and `resumed` release a held inspected subtitle when the user continues playback.
 
-The bridge exposes only the controls currently needed by the app. At present that is `pause()`.
+`adStarted` / `adCompleted` drive the automatic ad step-aside mode.
+
+The bridge exposes these control methods: `play()`, `pause()`, `seek(ms)`, `setVolume(0–1)`, `mute()`, `unmute()`.
 
 ## Error Behavior
 
