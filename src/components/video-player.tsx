@@ -4,6 +4,10 @@ import { createVkPlayerBridge, loadVkPlayerScript } from "@/lib/vk-player/vk-pla
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
 import { cn } from "@/lib/utils";
 
+// All callback props must be stable (e.g. wrapped in useCallback). They are in
+// the bridge-init effect's dependency array, so a fresh reference each render
+// would tear down and recreate the VK player. `blockInput` is intentionally NOT
+// in that effect — it only toggles the iframe's pointer-events.
 type VideoPlayerProps = {
   embedUrl: string;
   onTimeUpdate: (timeMs: number) => void;
