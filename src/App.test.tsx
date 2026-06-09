@@ -1887,4 +1887,19 @@ describe("App player chrome", () => {
     expect(screen.getByTestId("player-control-bar").className).toContain("opacity-100");
     expect(screen.getByTestId("player-corner-controls").className).toContain("opacity-100");
   });
+
+  it("toggles play/pause when clicking the video surface", async () => {
+    render(<App />);
+    const user = await loadAndPlay();
+    readyControls();
+
+    await user.click(screen.getByTestId("player-click-surface"));
+    expect(mocks.playPlayer).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      mocks.playerProps.current?.onPlayingChange?.(true);
+    });
+    await user.click(screen.getByTestId("player-click-surface"));
+    expect(mocks.pausePlayer).toHaveBeenCalledTimes(1);
+  });
 });

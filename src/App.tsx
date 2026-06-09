@@ -724,6 +724,20 @@ export default function App() {
                 />
 
                 {showCustomUi ? (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label="Play/pause video"
+                    data-testid="player-click-surface"
+                    onClick={handlePlayPause}
+                    className={cn(
+                      "absolute inset-0 h-full w-full bg-transparent",
+                      controlsVisible ? "cursor-pointer" : "cursor-none",
+                    )}
+                  />
+                ) : null}
+
+                {showCustomUi ? (
                   <div className="pointer-events-none absolute inset-x-0 bottom-16 flex flex-col items-center gap-1 px-8">
                     <SubtitleOverlay
                       lane={lane}
