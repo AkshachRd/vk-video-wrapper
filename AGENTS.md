@@ -106,7 +106,7 @@ Accepted subtitle hosts are intentionally allowlisted in the backend. Do not rel
 ### VK.VideoPlayer JS API Surface (confirmed)
 
 Methods available through the bridge:
-`play`, `pause`, `seek(ms)`, `setVolume(0–1)`, `getVolume()`, `mute()`, `unmute()`, `isMuted()`, `getCurrentTime()`, `getDuration()`, `getQuality()`, `getState()`, `on(event, handler)`, `off(event, handler)`, `destroy()`.
+`play`, `pause`, `seek(seconds)`, `setVolume(0–1)`, `getVolume()`, `mute()`, `unmute()`, `isMuted()`, `getCurrentTime()`, `getDuration()`, `getQuality()`, `getState()`, `on(event, handler)`, `off(event, handler)`, `destroy()`.
 
 Events fired by VK:
 `inited`, `timeupdate`, `volumechange`, `qualitychange`, `started`, `resumed`, `paused`, `seeked`, `ended`, `error`, `adStarted`, `adCompleted`, `fullscreenEnter`, `fullscreenExit`, `recommendationsLoaded`, `recommendationsClicked`.
