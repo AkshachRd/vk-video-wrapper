@@ -199,13 +199,13 @@ describe("VideoPlayer", () => {
     expect(src.searchParams.get("js_api")).toBe("1");
   });
 
-  it("loads the VK script, initializes the bridge, and cleans up on unmount", async () => {
+  it("loads the VK script, initializes the bridge with all callbacks, and cleans up on unmount", async () => {
     const destroy = vi.fn();
-    const pause = vi.fn();
+    const controls = { destroy, play: vi.fn(), pause: vi.fn(), seek: vi.fn(), setVolume: vi.fn(), mute: vi.fn(), unmute: vi.fn() };
     const onTimeUpdate = vi.fn();
     const onControlsReady = vi.fn();
     mocks.loadVkPlayerScript.mockResolvedValue(undefined);
-    mocks.createVkPlayerBridge.mockReturnValue({ destroy, pause });
+    mocks.createVkPlayerBridge.mockReturnValue(controls);
 
     const { unmount } = render(
       <VideoPlayer
@@ -217,16 +217,27 @@ describe("VideoPlayer", () => {
     const iframe = screen.getByTitle<HTMLIFrameElement>("VK Video player");
 
     await waitFor(() => {
-      expect(mocks.createVkPlayerBridge).toHaveBeenCalledWith({
-        iframe,
-        onTimeUpdate,
-      });
+      expect(mocks.createVkPlayerBridge).toHaveBeenCalledWith(
+        expect.objectContaining({ iframe, onTimeUpdate }),
+      );
     });
-    expect(onControlsReady).toHaveBeenCalledWith({ pause });
+    expect(onControlsReady).toHaveBeenCalledWith(controls);
 
     unmount();
 
     expect(onControlsReady).toHaveBeenLastCalledWith(undefined);
     expect(destroy).toHaveBeenCalled();
+  });
+
+  it("blocks iframe pointer input when blockInput is set", () => {
+    render(
+      <VideoPlayer
+        embedUrl="https://vk.com/video_ext.php?oid=1&id=2"
+        onTimeUpdate={vi.fn()}
+        blockInput
+      />,
+    );
+
+    expect(screen.getByTitle("VK Video player").className).toContain("pointer-events-none");
   });
 });

@@ -2,15 +2,31 @@ import { useEffect, useRef } from "react";
 
 import { createVkPlayerBridge, loadVkPlayerScript } from "@/lib/vk-player/vk-player-bridge";
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
+import { cn } from "@/lib/utils";
 
 type VideoPlayerProps = {
   embedUrl: string;
   onTimeUpdate: (timeMs: number) => void;
+  onDurationChange?: (durationMs: number) => void;
+  onPlayingChange?: (isPlaying: boolean) => void;
+  onVolumeChange?: (state: { volume: number; muted: boolean }) => void;
+  onAdChange?: (isAd: boolean) => void;
   onPlaybackStart?: () => void;
-  onControlsReady?: (controls: Pick<VkPlayerControls, "pause"> | undefined) => void;
+  onControlsReady?: (controls: VkPlayerControls | undefined) => void;
+  blockInput?: boolean;
 };
 
-export function VideoPlayer({ embedUrl, onTimeUpdate, onPlaybackStart, onControlsReady }: VideoPlayerProps) {
+export function VideoPlayer({
+  embedUrl,
+  onTimeUpdate,
+  onDurationChange,
+  onPlayingChange,
+  onVolumeChange,
+  onAdChange,
+  onPlaybackStart,
+  onControlsReady,
+  blockInput = false,
+}: VideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
@@ -28,9 +44,13 @@ export function VideoPlayer({ embedUrl, onTimeUpdate, onPlaybackStart, onControl
         bridge = createVkPlayerBridge({
           iframe: iframeRef.current,
           onTimeUpdate,
+          onDurationChange,
+          onPlayingChange,
+          onVolumeChange,
+          onAdChange,
           onPlaybackStart,
         });
-        onControlsReady?.({ pause: bridge.pause });
+        onControlsReady?.(bridge);
       } catch {
         return;
       }
@@ -43,7 +63,16 @@ export function VideoPlayer({ embedUrl, onTimeUpdate, onPlaybackStart, onControl
       onControlsReady?.(undefined);
       bridge?.destroy();
     };
-  }, [embedUrl, onControlsReady, onPlaybackStart, onTimeUpdate]);
+  }, [
+    embedUrl,
+    onAdChange,
+    onControlsReady,
+    onDurationChange,
+    onPlaybackStart,
+    onPlayingChange,
+    onTimeUpdate,
+    onVolumeChange,
+  ]);
 
   return (
     <iframe
@@ -52,7 +81,7 @@ export function VideoPlayer({ embedUrl, onTimeUpdate, onPlaybackStart, onControl
       src={withJsApi(embedUrl)}
       allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
       allowFullScreen
-      className="h-full w-full border-0"
+      className={cn("h-full w-full border-0", blockInput && "pointer-events-none")}
     />
   );
 }
