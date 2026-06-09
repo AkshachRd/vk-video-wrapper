@@ -31,6 +31,8 @@ pub struct VkSubtitleTrack {
 pub struct VkEmbedMetadata {
     pub embed_url: String,
     pub tracks: Vec<VkSubtitleTrack>,
+    pub title: Option<String>,
+    pub thumbnail_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -72,6 +74,8 @@ fn extract_embed_metadata(html: &str) -> Result<VkEmbedMetadata, VkLoadError> {
     Ok(VkEmbedMetadata {
         embed_url: String::new(),
         tracks,
+        title: extract_title(html),
+        thumbnail_url: extract_thumbnail(html),
     })
 }
 
@@ -105,9 +109,13 @@ pub async fn fetch_embed_metadata(id: &VkVideoId) -> Result<VkEmbedMetadata, VkL
         return Err(VkLoadError::SubtitlesNotFound);
     }
 
+    let title = extract_title(&html);
+    let thumbnail_url = extract_thumbnail(&html);
     let mut metadata = VkEmbedMetadata {
         embed_url: String::new(),
         tracks,
+        title,
+        thumbnail_url,
     };
     metadata.embed_url = embed_url;
     Ok(metadata)
@@ -774,7 +782,10 @@ mod tests {
             <meta property="og:image" content="https://img.example/preview.jpg">
             </head></html>"#;
 
-        assert_eq!(extract_title(html).as_deref(), Some("Deutsch lernen & mehr"));
+        assert_eq!(
+            extract_title(html).as_deref(),
+            Some("Deutsch lernen & mehr")
+        );
         assert_eq!(
             extract_thumbnail(html).as_deref(),
             Some("https://img.example/preview.jpg")
@@ -783,8 +794,7 @@ mod tests {
 
     #[test]
     fn falls_back_to_md_title_when_og_title_absent() {
-        let html =
-            r#"<html><body>var playerParams = {"md_title":"Easy German 142","subtitles":[]};</body></html>"#;
+        let html = r#"<html><body>var playerParams = {"md_title":"Easy German 142","subtitles":[]};</body></html>"#;
 
         assert_eq!(extract_title(html).as_deref(), Some("Easy German 142"));
     }

@@ -15,6 +15,8 @@ pub struct LoadedVideo {
     pub subtitle_text: String,
     pub secondary_track_id: Option<String>,
     pub secondary_subtitle_text: Option<String>,
+    pub title: Option<String>,
+    pub thumbnail_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -93,6 +95,8 @@ fn assemble_loaded_video(
         subtitle_text,
         secondary_track_id,
         secondary_subtitle_text,
+        title: metadata.title,
+        thumbnail_url: metadata.thumbnail_url,
     }
 }
 
@@ -162,6 +166,8 @@ mod tests {
             subtitle_text: "WEBVTT".to_string(),
             secondary_track_id: Some("ru_1_ru.vtt".to_string()),
             secondary_subtitle_text: Some("WEBVTT\n\nпривет".to_string()),
+            title: Some("Nicos Weg".to_string()),
+            thumbnail_url: Some("https://img.example/preview.jpg".to_string()),
         })
         .unwrap();
 
@@ -176,6 +182,8 @@ mod tests {
         assert_eq!(value["subtitleText"], "WEBVTT");
         assert_eq!(value["secondaryTrackId"], "ru_1_ru.vtt");
         assert_eq!(value["secondarySubtitleText"], "WEBVTT\n\nпривет");
+        assert_eq!(value["title"], "Nicos Weg");
+        assert_eq!(value["thumbnailUrl"], "https://img.example/preview.jpg");
     }
 
     #[test]
@@ -193,6 +201,8 @@ mod tests {
             subtitle_text: "WEBVTT".to_string(),
             secondary_track_id: None,
             secondary_subtitle_text: None,
+            title: None,
+            thumbnail_url: None,
         })
         .unwrap();
 
@@ -222,6 +232,8 @@ mod tests {
         let metadata = VkEmbedMetadata {
             embed_url: "https://vk.com/video_ext.php?oid=-1&id=2&hd=2&js_api=1".to_string(),
             tracks: vec![selected_track.clone()],
+            title: Some("Nicos Weg".to_string()),
+            thumbnail_url: Some("https://img.example/preview.jpg".to_string()),
         };
 
         let video = assemble_loaded_video(
@@ -241,6 +253,11 @@ mod tests {
             Some("WEBVTT\n\nпривет")
         );
         assert_eq!(video.tracks.len(), 1);
+        assert_eq!(video.title.as_deref(), Some("Nicos Weg"));
+        assert_eq!(
+            video.thumbnail_url.as_deref(),
+            Some("https://img.example/preview.jpg")
+        );
     }
 
     #[test]
