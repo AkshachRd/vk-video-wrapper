@@ -40,6 +40,23 @@ Out of scope (Phase 1):
 - Removing VK ads or VK recommendation cards (not possible via the API; we cover
   or step aside, we do not suppress).
 
+## Autoplay Spike Result (2026-06-09, WebView2)
+
+Verified in the running Tauri app with a temporary probe button wired to the
+bridge `play()`. On a fresh load, clicking our custom play (without ever touching
+VK's own controls) starts playback **with sound** — no muted-autoplay restriction,
+no `autoplaySoundProhibited` hint. **Conclusion: custom play drives playback
+directly; no first-play fallback (no "start via VK first" path) is needed.**
+
+Also observed during the spike: VK's "Watch also" recommendations card appears
+over the video (bottom-right) during playback. It is an in-iframe VK element with
+no API method or embed param to disable it (`recommendationsLoaded` /
+`recommendationClicked` are observe-only). Clean mode (`pointer-events:none`)
+prevents clicking it but does not stop it rendering. Fully removing all VK chrome
+(this card and ads) is only possible by not using VK's iframe player at all
+(playing the raw stream in our own `<video>`), which is a separate, larger effort
+(signed URLs, possible DRM, ToS) and out of scope for Phase 1.
+
 ## VK Player JS API Findings (verified from videoplayer.js)
 
 The player object returned by `new VK.VideoPlayer(iframe)` (from
