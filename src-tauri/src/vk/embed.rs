@@ -459,6 +459,56 @@ fn subtitle_label_for_lang(lang: &str) -> String {
     }
 }
 
+fn extract_title(html: &str) -> Option<String> {
+    extract_meta_content(html, "og:title").or_else(|| extract_md_title(html))
+}
+
+fn extract_thumbnail(html: &str) -> Option<String> {
+    extract_meta_content(html, "og:image")
+}
+
+fn extract_meta_content(html: &str, property: &str) -> Option<String> {
+    let tag_pattern = format!(
+        r#"(?is)<meta\b[^>]*\b(?:property|name)\s*=\s*["']{}["'][^>]*>"#,
+        regex::escape(property)
+    );
+    let tag_re = Regex::new(&tag_pattern).ok()?;
+    let content_re = Regex::new(r#"(?is)\bcontent\s*=\s*["']([^"']*)["']"#).ok()?;
+
+    let tag = tag_re.find(html)?.as_str();
+    let content = content_re.captures(tag)?.get(1)?.as_str();
+    let decoded = decode_html_entities(content);
+    let trimmed = decoded.trim();
+
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn extract_md_title(html: &str) -> Option<String> {
+    let re = Regex::new(r#""md_title"\s*:\s*"((?:\\.|[^"\\])*)""#).ok()?;
+    let raw = re.captures(html)?.get(1)?.as_str();
+    let decoded = decode_json_string(raw)?;
+    let trimmed = decoded.trim();
+
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn decode_html_entities(value: &str) -> String {
+    value
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+}
+
 fn extract_subtitle_array(html: &str) -> Result<&str, VkLoadError> {
     let key_re =
         Regex::new(r#""subtitles"\s*:|\bsubtitles\s*:"#).expect("valid subtitles key regex");
@@ -715,5 +765,35 @@ mod tests {
     #[test]
     fn builds_embed_client() {
         assert!(build_embed_client().is_ok());
+    }
+
+    #[test]
+    fn extracts_title_and_thumbnail_from_og_meta() {
+        let html = r#"<html><head>
+            <meta property="og:title" content="Deutsch lernen &amp; mehr">
+            <meta property="og:image" content="https://img.example/preview.jpg">
+            </head></html>"#;
+
+        assert_eq!(extract_title(html).as_deref(), Some("Deutsch lernen & mehr"));
+        assert_eq!(
+            extract_thumbnail(html).as_deref(),
+            Some("https://img.example/preview.jpg")
+        );
+    }
+
+    #[test]
+    fn falls_back_to_md_title_when_og_title_absent() {
+        let html =
+            r#"<html><body>var playerParams = {"md_title":"Easy German 142","subtitles":[]};</body></html>"#;
+
+        assert_eq!(extract_title(html).as_deref(), Some("Easy German 142"));
+    }
+
+    #[test]
+    fn returns_none_when_no_title_or_thumbnail() {
+        let html = r#"<html><head></head><body></body></html>"#;
+
+        assert_eq!(extract_title(html), None);
+        assert_eq!(extract_thumbnail(html), None);
     }
 }
