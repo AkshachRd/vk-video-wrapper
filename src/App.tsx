@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Maximize2, Minimize2, Settings, X } from "lucide-react";
+import { Captions, Maximize2, Minimize2, Settings, X } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SavedWordsPanel } from "@/components/saved-words-panel";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
 import { PlayerControls } from "@/components/player-controls";
@@ -66,6 +67,7 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   const [isAd, setIsAd] = useState(false);
   const [playerMode, setPlayerMode] = useState<"clean" | "vk">("clean");
+  const [subtitlesMenuOpen, setSubtitlesMenuOpen] = useState(false);
   const [wordLookup, setWordLookup] = useState<WordLookupState>({ status: "idle" });
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
   const [areSavedWordsLoading, setAreSavedWordsLoading] = useState(true);
@@ -634,8 +636,69 @@ export default function App() {
   const showCustomUi = playerMode === "clean" && !isAd;
   const blockInput = showCustomUi;
   const { visible: controlsVisible, reveal: revealControls } = useControlsAutoHide({
-    active: isPlaying && showCustomUi,
+    active: isPlaying && showCustomUi && !subtitlesMenuOpen,
   });
+
+  const subtitlesMenu =
+    video && video.tracks.length > 0 ? (
+      <Popover open={subtitlesMenuOpen} onOpenChange={setSubtitlesMenuOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label="Субтитры и перевод"
+            title="Субтитры и перевод"
+            className="rounded p-1 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          >
+            <Captions className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          side="top"
+          container={isFullscreen ? playerContainer : undefined}
+          className="w-64"
+        >
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1 text-sm text-slate-300">
+              <span>Субтитры</span>
+              <select
+                aria-label="Subtitles"
+                value={selectedTrackId}
+                disabled={isTrackLoading}
+                onChange={handleTrackChange}
+                className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
+              >
+                {video.tracks.map((track) => (
+                  <option key={track.id} value={track.id}>
+                    {formatTrackLabel(track)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-300">
+              <span>Перевод</span>
+              <select
+                aria-label="Перевод"
+                value={selectedSecondaryTrackId}
+                disabled={isSecondaryTrackLoading}
+                onChange={handleSecondaryTrackChange}
+                className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
+              >
+                <option value="">Нет</option>
+                {video.tracks.map((track) => (
+                  <option key={track.id} value={track.id}>
+                    {formatTrackLabel(track)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {secondaryError ? (
+              <span className="text-sm text-amber-300">{secondaryError}</span>
+            ) : null}
+          </div>
+        </PopoverContent>
+      </Popover>
+    ) : null;
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100">
@@ -658,49 +721,6 @@ export default function App() {
         {video && lane ? (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm text-slate-400">Loaded subtitles</div>
-                {video.tracks.length > 0 ? (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="flex items-center gap-2 text-sm text-slate-300">
-                      <span>Subtitles</span>
-                      <select
-                        aria-label="Subtitles"
-                        value={selectedTrackId}
-                        disabled={isTrackLoading}
-                        onChange={handleTrackChange}
-                        className="h-9 min-w-40 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
-                      >
-                        {video.tracks.map((track) => (
-                          <option key={track.id} value={track.id}>
-                            {formatTrackLabel(track)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-slate-300">
-                      <span>Перевод</span>
-                      <select
-                        aria-label="Перевод"
-                        value={selectedSecondaryTrackId}
-                        disabled={isSecondaryTrackLoading}
-                        onChange={handleSecondaryTrackChange}
-                        className="h-9 min-w-40 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
-                      >
-                        <option value="">Нет</option>
-                        {video.tracks.map((track) => (
-                          <option key={track.id} value={track.id}>
-                            {formatTrackLabel(track)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {secondaryError ? (
-                      <span className="text-sm text-amber-300">{secondaryError}</span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
               <div
                 ref={setPlayerContainer}
                 data-testid="player-container"
@@ -777,6 +797,7 @@ export default function App() {
                       onSeek={handleSeek}
                       onSetVolume={handleSetVolume}
                       onToggleMute={handleToggleMute}
+                      trailing={subtitlesMenu}
                     />
                   </div>
                 ) : null}

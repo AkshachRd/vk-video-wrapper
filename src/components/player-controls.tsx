@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Play, Pause, Volume2, VolumeX } from "lucide-react";
 
 type PlayerControlsProps = {
@@ -10,6 +11,7 @@ type PlayerControlsProps = {
   onSeek: (timeMs: number) => void;
   onSetVolume: (value: number) => void;
   onToggleMute: () => void;
+  trailing?: ReactNode;
 };
 
 export function PlayerControls({
@@ -22,6 +24,7 @@ export function PlayerControls({
   onSeek,
   onSetVolume,
   onToggleMute,
+  trailing,
 }: PlayerControlsProps) {
   const clampedTime = Math.min(currentTimeMs, durationMs || currentTimeMs);
 
@@ -69,6 +72,8 @@ export function PlayerControls({
         onChange={(event) => onSetVolume(Number(event.target.value))}
         className="h-1 w-20 cursor-pointer accent-sky-400"
       />
+
+      {trailing}
     </div>
   );
 }

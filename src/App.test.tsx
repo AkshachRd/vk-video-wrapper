@@ -291,7 +291,6 @@ describe("App", () => {
       url: "https://vkvideo.ru/video-1_2",
     });
     expect(await screen.findByText(/video_ext\.php/)).toBeInTheDocument();
-    expect(screen.getByText("Loaded subtitles")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "advance video" }));
 
@@ -801,7 +800,7 @@ describe("App", () => {
 
     resolveLoad(loadedVideo());
 
-    expect(await screen.findByText("Loaded subtitles")).toBeInTheDocument();
+    expect(await screen.findByText(/video_ext\.php/)).toBeInTheDocument();
   });
 
   it("shows a subtitle track dropdown with readable labels after loading", async () => {
@@ -821,6 +820,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
     await user.click(screen.getByRole("button", { name: "Load" }));
 
+    await openSubtitlesMenu(user);
     const select = await screen.findByRole("combobox", { name: "Subtitles" });
 
     expect(select).toHaveValue("ru_0_ru.vtt");
@@ -852,6 +852,7 @@ describe("App", () => {
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
     await user.click(screen.getByRole("button", { name: "Load" }));
+    await openSubtitlesMenu(user);
     await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
 
     expect(mocks.invoke).toHaveBeenCalledWith("load_subtitle_track", {
@@ -911,6 +912,7 @@ describe("App", () => {
     const input = screen.getByLabelText("VK Video URL");
     await user.type(input, "https://vkvideo.ru/video-1_2");
     await user.click(screen.getByRole("button", { name: "Load" }));
+    await openSubtitlesMenu(user);
     await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
 
     await user.clear(input);
@@ -918,6 +920,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Load" }));
 
     expect(await screen.findByText(/oid=-3&id=4/)).toBeInTheDocument();
+    await openSubtitlesMenu(user);
     expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
 
     await act(async () => {
@@ -1470,7 +1473,8 @@ describe("App", () => {
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
     await user.click(screen.getByRole("button", { name: "Load" }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+    await openSubtitlesMenu(user);
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
 
     expect(await screen.findByText("This subtitle track is no longer available.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
@@ -1501,7 +1505,8 @@ describe("App", () => {
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
     await user.click(screen.getByRole("button", { name: "Load" }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+    await openSubtitlesMenu(user);
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
 
     expect(await screen.findByText("Subtitles could not be parsed for this track.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
@@ -1610,6 +1615,10 @@ async function loadAndPlay(timeMs = 2000) {
   return user;
 }
 
+async function openSubtitlesMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Субтитры и перевод" }));
+}
+
 function readyControls() {
   act(() => {
     mocks.readyPlayer();
@@ -1711,6 +1720,7 @@ describe("App second subtitle line", () => {
     render(<App />);
     const user = await loadAndPlay();
 
+    await openSubtitlesMenu(user);
     await user.selectOptions(screen.getByLabelText("Перевод"), "en");
 
     expect(await screen.findByText("hello there")).toBeInTheDocument();
@@ -1725,6 +1735,7 @@ describe("App second subtitle line", () => {
     render(<App />);
     const user = await loadAndPlay();
 
+    await openSubtitlesMenu(user);
     await user.selectOptions(screen.getByLabelText("Перевод"), "");
 
     expect(screen.queryByText("Привет Макс")).not.toBeInTheDocument();
@@ -1740,6 +1751,7 @@ describe("App second subtitle line", () => {
     setupInvoke({ failSecondarySwitch: true });
     const user = await loadAndPlay();
 
+    await openSubtitlesMenu(user);
     await user.selectOptions(screen.getByLabelText("Перевод"), "en");
 
     expect(await screen.findByText("Не удалось загрузить вторую дорожку.")).toBeInTheDocument();
