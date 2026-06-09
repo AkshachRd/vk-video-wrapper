@@ -468,11 +468,69 @@ fn subtitle_label_for_lang(lang: &str) -> String {
 }
 
 fn extract_title(html: &str) -> Option<String> {
-    extract_meta_content(html, "og:title").or_else(|| extract_md_title(html))
+    extract_player_video_title(html)
+        .or_else(|| extract_meta_content(html, "og:title"))
+        .or_else(|| extract_md_title(html))
 }
 
 fn extract_thumbnail(html: &str) -> Option<String> {
-    extract_meta_content(html, "og:image")
+    extract_player_thumbnail(html).or_else(|| extract_meta_content(html, "og:image"))
+}
+
+// The VK embed player JSON carries the video title in the video's identity
+// block (`"owner_id":<id>,...,"title":"..."`). `owner_id` appears once in an
+// embed and always before this title, so anchoring on it avoids grabbing a
+// subtitle track's own `"title"` (which appears earlier in the subtitles array).
+fn extract_player_video_title(html: &str) -> Option<String> {
+    let re = Regex::new(r#""owner_id":-?\d+[^{}]*?"title":"((?:\\.|[^"\\])*)""#).ok()?;
+    let raw = re.captures(html)?.get(1)?.as_str();
+    let decoded = decode_json_string(raw)?;
+    let trimmed = decoded.trim();
+
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+// The video object exposes a preview array `"image":[{"url":..,"width":..}, ..]`
+// of thumbnail sizes (distinct from `"first_frame"`). Pick the largest by width.
+fn extract_player_thumbnail(html: &str) -> Option<String> {
+    let array = extract_image_array(html)?;
+    let entry_re = Regex::new(r#""url":"((?:\\.|[^"\\])*)"[^}]*?"width":(\d+)"#).ok()?;
+    let mut best: Option<(i64, String)> = None;
+
+    for caps in entry_re.captures_iter(array) {
+        let Some(url_match) = caps.get(1) else {
+            continue;
+        };
+        let Some(width_match) = caps.get(2) else {
+            continue;
+        };
+        let Ok(width) = width_match.as_str().parse::<i64>() else {
+            continue;
+        };
+        let Some(url) = decode_json_string(url_match.as_str()) else {
+            continue;
+        };
+
+        if best
+            .as_ref()
+            .map_or(true, |(best_width, _)| width > *best_width)
+        {
+            best = Some((width, url));
+        }
+    }
+
+    best.map(|(_, url)| url)
+}
+
+fn extract_image_array(html: &str) -> Option<&str> {
+    let key_re = Regex::new(r#""image"\s*:\s*\["#).ok()?;
+    let key_match = key_re.find(html)?;
+    let bracket_start = key_match.end() - 1;
+    extract_balanced_json_array(html, bracket_start).ok()
 }
 
 fn extract_meta_content(html: &str, property: &str) -> Option<String> {
@@ -805,5 +863,23 @@ mod tests {
 
         assert_eq!(extract_title(html), None);
         assert_eq!(extract_thumbnail(html), None);
+    }
+
+    #[test]
+    fn extracts_video_title_and_thumbnail_from_player_params() {
+        let html = concat!(
+            r#"var playerParams = {"params":[{"#,
+            r#""subtitles":[{"lang":"ru","title":"Nicos Weg (A1).ru.srt","url":"https:\/\/vkvd.okcdn.ru\/sub.vtt"}],"#,
+            r#""image":[{"url":"https:\/\/sun9-62.userapi.com\/small.jpg","width":130,"height":96,"with_padding":1},"#,
+            r#"{"url":"https:\/\/sun9-62.userapi.com\/big.jpg","width":640,"height":480,"with_padding":1}],"#,
+            r#""first_frame":[{"url":"https:\/\/sun9-62.userapi.com\/frame.jpg","width":1000,"height":700}],"#,
+            r#""duration":6220,"height":720,"id":456239038,"owner_id":-145784486,"ov_id":"9870329260277","title":"Nicos Weg (A1)"}]};"#,
+        );
+
+        assert_eq!(extract_title(html).as_deref(), Some("Nicos Weg (A1)"));
+        assert_eq!(
+            extract_thumbnail(html).as_deref(),
+            Some("https://sun9-62.userapi.com/big.jpg")
+        );
     }
 }
