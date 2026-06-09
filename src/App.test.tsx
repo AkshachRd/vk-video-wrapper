@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WordLookup } from "@/lib/dictionary/types";
+import type { RecentVideo } from "@/lib/recent-videos/types";
 import type { SavedWord } from "@/lib/saved-words/types";
 import type { LoadedVideo, SubtitleCue } from "@/lib/subtitles/types";
 
@@ -102,6 +103,20 @@ function loadedVideo(overrides: Partial<LoadedVideo> = {}): LoadedVideo {
       "00:00:00.000 --> 00:00:01.000",
       "Hello from VK",
     ].join("\n"),
+    ...overrides,
+  };
+}
+
+function recentVideo(overrides: Partial<RecentVideo> = {}): RecentVideo {
+  return {
+    id: "-1_2",
+    url: "https://vkvideo.ru/video-1_2",
+    ownerId: -1,
+    videoId: 2,
+    title: "Deutsch lernen",
+    thumbnailUrl: "https://img.example/p.jpg",
+    createdAtMs: 1000,
+    lastWatchedAtMs: 2000,
     ...overrides,
   };
 }
@@ -273,6 +288,12 @@ describe("App", () => {
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "list_saved_words") {
         return Promise.resolve([]);
+      }
+      if (command === "list_recent_videos") {
+        return Promise.resolve([]);
+      }
+      if (command === "record_recent_video") {
+        return Promise.resolve(recentVideo());
       }
 
       return Promise.resolve(loadedVideo());
@@ -730,6 +751,8 @@ describe("App", () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      if (command === "record_recent_video") return Promise.resolve(recentVideo());
       return Promise.resolve(
         loadedVideo({
           subtitleText: "WEBVTT\n\nNOTE no cues here",
@@ -807,6 +830,8 @@ describe("App", () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      if (command === "record_recent_video") return Promise.resolve(recentVideo());
       return Promise.resolve(
         loadedVideo({
           tracks: subtitleTracks,
@@ -833,6 +858,8 @@ describe("App", () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      if (command === "record_recent_video") return Promise.resolve(recentVideo());
       if (command === "load_video_from_url") {
         return Promise.resolve(
           loadedVideo({
@@ -1136,6 +1163,8 @@ describe("App", () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      if (command === "record_recent_video") return Promise.resolve(recentVideo());
       return Promise.resolve(
         loadedVideo({
           tracks: [frenchTrack],
@@ -1485,6 +1514,8 @@ describe("App", () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      if (command === "record_recent_video") return Promise.resolve(recentVideo());
       if (command === "load_video_from_url") {
         return Promise.resolve(
           loadedVideo({
@@ -1588,6 +1619,10 @@ function setupInvoke(overrides: InvokeOverrides = {}) {
     switch (command) {
       case "list_saved_words":
         return Promise.resolve([]);
+      case "list_recent_videos":
+        return Promise.resolve([]);
+      case "record_recent_video":
+        return Promise.resolve(recentVideo());
       case "load_video_from_url":
         return Promise.resolve(video);
       case "load_subtitle_track":
@@ -1913,5 +1948,127 @@ describe("App player chrome", () => {
     });
     await user.click(screen.getByTestId("player-click-surface"));
     expect(mocks.pausePlayer).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("App recent videos", () => {
+  beforeEach(() => {
+    mocks.invoke.mockReset();
+    mocks.parseWebVtt.mockReset();
+    mocks.playerProps.current = undefined;
+    mocks.parseMap.clear();
+    mocks.parseWebVtt.mockImplementation(() => [
+      {
+        id: "c1",
+        startMs: 0,
+        endMs: 1000,
+        text: "Hello",
+        words: [{ id: "c1:0", text: "Hello", cleanText: "Hello" }],
+      },
+    ]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("lists recent videos on the start screen", async () => {
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_recent_videos") {
+        return Promise.resolve([recentVideo({ title: "Deutsch lernen" })]);
+      }
+      if (command === "list_saved_words") return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Deutsch lernen" })).toBeInTheDocument();
+  });
+
+  it("loads a video when a recent card is clicked and records it", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_recent_videos") {
+        return Promise.resolve([
+          recentVideo({ title: "Deutsch lernen", url: "https://vkvideo.ru/video-1_2" }),
+        ]);
+      }
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({ title: "Deutsch lernen", thumbnailUrl: "https://img.example/p.jpg" }),
+        );
+      }
+      if (command === "record_recent_video") {
+        return Promise.resolve(recentVideo());
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Deutsch lernen" }));
+
+    expect(await screen.findByText(/video_ext\.php/)).toBeInTheDocument();
+    expect(mocks.invoke).toHaveBeenCalledWith("load_video_from_url", {
+      url: "https://vkvideo.ru/video-1_2",
+    });
+    expect(mocks.invoke).toHaveBeenCalledWith("record_recent_video", {
+      payload: {
+        url: "https://vkvideo.ru/video-1_2",
+        ownerId: -1,
+        videoId: 2,
+        title: "Deutsch lernen",
+        thumbnailUrl: "https://img.example/p.jpg",
+      },
+    });
+  });
+
+  it("returns to the start screen with the back control", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_recent_videos") {
+        return Promise.resolve([recentVideo({ title: "Deutsch lernen" })]);
+      }
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "load_video_from_url") return Promise.resolve(loadedVideo());
+      if (command === "record_recent_video") return Promise.resolve(recentVideo());
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: "Load" }));
+    await screen.findByText(/video_ext\.php/);
+
+    await user.click(screen.getByRole("button", { name: "← К списку" }));
+
+    expect(await screen.findByRole("button", { name: "Deutsch lernen" })).toBeInTheDocument();
+    expect(screen.queryByText(/video_ext\.php/)).not.toBeInTheDocument();
+  });
+
+  it("removes a recent video from the start screen", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_recent_videos") {
+        return Promise.resolve([recentVideo({ title: "Deutsch lernen" })]);
+      }
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "remove_recent_video") return Promise.resolve(undefined);
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Удалить из истории: Deutsch lernen" }),
+    );
+
+    expect(mocks.invoke).toHaveBeenCalledWith("remove_recent_video", { id: "-1_2" });
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Deutsch lernen" })).not.toBeInTheDocument();
+    });
   });
 });

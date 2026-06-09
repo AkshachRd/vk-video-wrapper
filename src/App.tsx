@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RecentVideosList } from "@/components/recent-videos-list";
 import { SavedWordsPanel } from "@/components/saved-words-panel";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
 import { PlayerControls } from "@/components/player-controls";
@@ -13,6 +14,7 @@ import { SubtitleReferenceLine } from "@/components/subtitle-reference-line";
 import { VideoPlayer } from "@/components/video-player";
 import { getSupportedLookupLanguage } from "@/lib/dictionary/supported-lookup-language";
 import type { WordLookup, WordLookupState } from "@/lib/dictionary/types";
+import type { RecentVideo, RecordRecentVideoRequest } from "@/lib/recent-videos/types";
 import { normalizeSavedWord } from "@/lib/saved-words/normalize-saved-word";
 import type { SavedWord, SaveWordRequest, WordSaveControl } from "@/lib/saved-words/types";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
@@ -75,6 +77,10 @@ export default function App() {
   const [pendingSavedWordActions, setPendingSavedWordActions] = useState<Record<string, PendingSavedWordAction>>({});
   const [saveWordErrorKey, setSaveWordErrorKey] = useState<string | undefined>();
   const [savedWordsPanelError, setSavedWordsPanelError] = useState<string | undefined>();
+  const [recentVideos, setRecentVideos] = useState<RecentVideo[]>([]);
+  const [areRecentVideosLoading, setAreRecentVideosLoading] = useState(true);
+  const [recentVideosUnavailable, setRecentVideosUnavailable] = useState(false);
+  const [recentVideosError, setRecentVideosError] = useState<string | undefined>();
   const requestIdRef = useRef(0);
   const trackRequestIdRef = useRef(0);
   const secondaryTrackRequestIdRef = useRef(0);
@@ -112,6 +118,25 @@ export default function App() {
       })
       .finally(() => {
         if (!cancelled) setAreSavedWordsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void invoke<RecentVideo[]>("list_recent_videos")
+      .then((videos) => {
+        if (!cancelled) setRecentVideos(videos);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentVideosUnavailable(true);
+      })
+      .finally(() => {
+        if (!cancelled) setAreRecentVideosLoading(false);
       });
 
     return () => {
@@ -344,11 +369,27 @@ export default function App() {
     setCurrentTimeMs(nextTimeMs);
   }, []);
 
-  const handleSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
+  const recordRecentVideo = useCallback((loadedVideo: LoadedVideo, sourceUrl: string) => {
+    const payload: RecordRecentVideoRequest = {
+      url: sourceUrl,
+      ownerId: loadedVideo.videoId.ownerId,
+      videoId: loadedVideo.videoId.videoId,
+      title: loadedVideo.title ?? null,
+      thumbnailUrl: loadedVideo.thumbnailUrl ?? null,
+    };
 
-      const trimmedUrl = url.trim();
+    void invoke<RecentVideo>("record_recent_video", { payload })
+      .then((saved) => {
+        setRecentVideos((list) => [saved, ...list.filter((item) => item.id !== saved.id)]);
+      })
+      .catch(() => {
+        // Recording history is best-effort; never disturb playback.
+      });
+  }, []);
+
+  const loadFromUrl = useCallback(
+    async (rawUrl: string) => {
+      const trimmedUrl = rawUrl.trim();
       if (isLoading || !trimmedUrl) {
         return;
       }
@@ -433,9 +474,56 @@ export default function App() {
           // Opora is optional; ignore a parse failure silently.
         }
       }
+
+      recordRecentVideo(loadedVideo, trimmedUrl);
     },
-    [isLoading, resetWordLookup, url],
+    [isLoading, recordRecentVideo, resetWordLookup],
   );
+
+  const handleSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void loadFromUrl(url);
+    },
+    [loadFromUrl, url],
+  );
+
+  const handleSelectRecentVideo = useCallback(
+    (video: RecentVideo) => {
+      setUrl(video.url);
+      void loadFromUrl(video.url);
+    },
+    [loadFromUrl],
+  );
+
+  const handleRemoveRecentVideo = useCallback(async (video: RecentVideo) => {
+    setRecentVideosError(undefined);
+
+    try {
+      await invoke("remove_recent_video", { id: video.id });
+      setRecentVideos((list) => list.filter((item) => item.id !== video.id));
+    } catch {
+      setRecentVideosError("Не удалось удалить из истории");
+    }
+  }, []);
+
+  const handleBackToList = useCallback(() => {
+    requestIdRef.current += 1;
+    trackRequestIdRef.current += 1;
+    secondaryTrackRequestIdRef.current += 1;
+    resetWordLookup();
+    pendingSubtitlePauseRef.current = undefined;
+    playerControlsRef.current = undefined;
+    setVideo(undefined);
+    setLane(undefined);
+    setSecondaryLane(undefined);
+    setSelectedTrackId("");
+    setSelectedSecondaryTrackId("");
+    setSecondaryError(undefined);
+    setError(undefined);
+    setHeldSubtitleTimeMs(undefined);
+    setIsPlaying(false);
+  }, [resetWordLookup]);
 
   const handleTrackChange = useCallback(
     async (event: ChangeEvent<HTMLSelectElement>) => {
@@ -718,8 +806,27 @@ export default function App() {
       <section className="mx-auto mt-6 max-w-7xl">
         {error ? <Alert>{error}</Alert> : null}
 
+        {!video || !lane ? (
+          <RecentVideosList
+            videos={recentVideos}
+            isLoading={areRecentVideosLoading}
+            isUnavailable={recentVideosUnavailable}
+            error={recentVideosError}
+            onSelect={handleSelectRecentVideo}
+            onRemove={handleRemoveRecentVideo}
+          />
+        ) : null}
+
         {video && lane ? (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <>
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="mb-3 text-sm text-slate-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            >
+              ← К списку
+            </button>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="space-y-3">
               <div
                 ref={setPlayerContainer}
@@ -858,7 +965,8 @@ export default function App() {
               error={savedWordsPanelError}
               onRemove={handleRemoveSavedWord}
             />
-          </div>
+            </div>
+          </>
         ) : null}
       </section>
     </main>
