@@ -1,3 +1,4 @@
+mod recent_videos;
 mod saved_words;
 mod vk;
 
