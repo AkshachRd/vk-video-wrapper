@@ -48,6 +48,8 @@ export interface LoadedVideo {
   subtitleText: string;
   secondaryTrackId?: string;
   secondarySubtitleText?: string;
+  title?: string;
+  thumbnailUrl?: string;
 }
 
 export interface LoadedSubtitleTrack {
