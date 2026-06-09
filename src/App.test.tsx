@@ -14,11 +14,23 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   parseWebVtt: vi.fn(),
   pausePlayer: vi.fn(),
+  playPlayer: vi.fn(),
+  seekPlayer: vi.fn(),
+  setVolumePlayer: vi.fn(),
+  mutePlayer: vi.fn(),
+  unmutePlayer: vi.fn(),
   emitTimeUpdate: vi.fn(),
   emitPlaybackStart: vi.fn(),
   readyPlayer: vi.fn(),
   // secondary-line suite: captures the latest VideoPlayer props
-  playerProps: { current: undefined as undefined | { onTimeUpdate: (ms: number) => void } },
+  playerProps: { current: undefined as undefined | {
+    onTimeUpdate: (ms: number) => void;
+    onPlaybackStart?: () => void;
+    onPlayingChange?: (isPlaying: boolean) => void;
+    onVolumeChange?: (state: { volume: number; muted: boolean }) => void;
+    onAdChange?: (isAd: boolean) => void;
+    onControlsReady?: (controls: unknown) => void;
+  } },
   parseMap: new Map<string, SubtitleCue[]>(),
 }));
 
@@ -37,40 +49,37 @@ vi.mock("@/lib/subtitles/parse-webvtt", () => ({
 }));
 
 vi.mock("@/components/video-player", () => ({
-  VideoPlayer: ({
-    embedUrl,
-    onTimeUpdate,
-    onPlaybackStart,
-    onControlsReady,
-  }: {
-    embedUrl: string;
-    onTimeUpdate: (timeMs: number) => void;
+  VideoPlayer: (props: {
+    embedUrl?: string;
+    onTimeUpdate: (ms: number) => void;
     onPlaybackStart?: () => void;
-    onControlsReady?: (controls: { pause: () => void } | undefined) => void;
+    onPlayingChange?: (isPlaying: boolean) => void;
+    onVolumeChange?: (state: { volume: number; muted: boolean }) => void;
+    onAdChange?: (isAd: boolean) => void;
+    onControlsReady?: (controls: unknown) => void;
+    blockInput?: boolean;
   }) => {
-    // secondary-line suite: capture props for direct onTimeUpdate calls
-    mocks.playerProps.current = { onTimeUpdate };
-
-    // existing suite: wire up emit helpers
-    mocks.emitTimeUpdate.mockImplementation(onTimeUpdate);
-    mocks.emitPlaybackStart.mockImplementation(() => onPlaybackStart?.());
-    mocks.readyPlayer.mockImplementation(() => onControlsReady?.({ pause: mocks.pausePlayer }));
-
+    mocks.playerProps.current = props;
+    mocks.emitTimeUpdate.mockImplementation(props.onTimeUpdate);
+    mocks.emitPlaybackStart.mockImplementation(() => props.onPlaybackStart?.());
+    mocks.readyPlayer.mockImplementation(() =>
+      props.onControlsReady?.({
+        play: mocks.playPlayer,
+        pause: mocks.pausePlayer,
+        seek: mocks.seekPlayer,
+        setVolume: mocks.setVolumePlayer,
+        mute: mocks.mutePlayer,
+        unmute: mocks.unmutePlayer,
+        destroy: vi.fn(),
+      }),
+    );
     return (
-      <div data-testid="video-player">
-        <div>Player: {embedUrl}</div>
-        <button type="button" onClick={() => onControlsReady?.({ pause: mocks.pausePlayer })}>
-          ready player
-        </button>
-        <button type="button" onClick={() => onTimeUpdate(500)}>
-          advance video
-        </button>
-        <button type="button" onClick={() => onTimeUpdate(1000)}>
-          advance to next subtitle
-        </button>
-        <button type="button" onClick={() => onTimeUpdate(1200)}>
-          late player tick
-        </button>
+      <div data-testid="video-player" data-block-input={props.blockInput ? "true" : "false"}>
+        <div>Player: {props.embedUrl}</div>
+        <button type="button" onClick={() => mocks.readyPlayer()}>ready player</button>
+        <button type="button" onClick={() => props.onTimeUpdate(500)}>advance video</button>
+        <button type="button" onClick={() => props.onTimeUpdate(1000)}>advance to next subtitle</button>
+        <button type="button" onClick={() => props.onTimeUpdate(1200)}>late player tick</button>
       </div>
     );
   },
@@ -1601,6 +1610,12 @@ async function loadAndPlay(timeMs = 2000) {
   return user;
 }
 
+function readyControls() {
+  act(() => {
+    mocks.readyPlayer();
+  });
+}
+
 describe("App second subtitle line", () => {
   beforeEach(() => {
     mocks.invoke.mockReset();
@@ -1784,5 +1799,84 @@ describe("App fullscreen", () => {
         value: null,
       });
     }
+  });
+});
+
+describe("App player chrome", () => {
+  beforeEach(() => {
+    mocks.invoke.mockReset();
+    mocks.playerProps.current = undefined;
+    mocks.parseMap.clear();
+    mocks.parseMap.set("PRIMARY", PRIMARY_CUES);
+    mocks.parseMap.set("SECONDARY_RU", SECONDARY_CUES);
+    mocks.playPlayer.mockReset();
+    mocks.pausePlayer.mockReset();
+    mocks.seekPlayer.mockReset();
+    mocks.setVolumePlayer.mockReset();
+    mocks.mutePlayer.mockReset();
+    mocks.unmutePlayer.mockReset();
+    setupInvoke();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders the custom control bar and blocks iframe input in clean mode", async () => {
+    render(<App />);
+    await loadAndPlay();
+    readyControls();
+
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("true");
+  });
+
+  it("plays and pauses through the bridge controls", async () => {
+    render(<App />);
+    const user = await loadAndPlay();
+    readyControls();
+
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    expect(mocks.playPlayer).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      mocks.playerProps.current?.onPlayingChange?.(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+    expect(mocks.pausePlayer).toHaveBeenCalledTimes(1);
+  });
+
+  it("switches to VK mode (enables iframe input, hides the bar) and back", async () => {
+    render(<App />);
+    const user = await loadAndPlay();
+    readyControls();
+
+    await user.click(screen.getByRole("button", { name: "VK controls (speed, quality)" }));
+
+    expect(screen.queryByRole("button", { name: "Play" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("false");
+
+    await user.click(screen.getByRole("button", { name: "Back to clean controls" }));
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("true");
+  });
+
+  it("steps aside during an ad and restores afterward", async () => {
+    render(<App />);
+    await loadAndPlay();
+    readyControls();
+
+    act(() => {
+      mocks.playerProps.current?.onAdChange?.(true);
+    });
+    expect(screen.queryByRole("button", { name: "Play" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("false");
+
+    act(() => {
+      mocks.playerProps.current?.onAdChange?.(false);
+    });
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("true");
   });
 });

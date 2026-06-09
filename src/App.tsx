@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, Settings, X } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SavedWordsPanel } from "@/components/saved-words-panel";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
+import { PlayerControls } from "@/components/player-controls";
 import { SubtitleReferenceLine } from "@/components/subtitle-reference-line";
 import { VideoPlayer } from "@/components/video-player";
 import { getSupportedLookupLanguage } from "@/lib/dictionary/supported-lookup-language";
@@ -57,6 +58,13 @@ export default function App() {
   const [secondaryError, setSecondaryError] = useState<string | undefined>();
   const [playerContainer, setPlayerContainer] = useState<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTimeMs, setCurrentTimeMs] = useState(0);
+  const [durationMs, setDurationMs] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const [isAd, setIsAd] = useState(false);
+  const [playerMode, setPlayerMode] = useState<"clean" | "vk">("clean");
   const [wordLookup, setWordLookup] = useState<WordLookupState>({ status: "idle" });
   const [savedWords, setSavedWords] = useState<SavedWord[]>([]);
   const [areSavedWordsLoading, setAreSavedWordsLoading] = useState(true);
@@ -68,7 +76,7 @@ export default function App() {
   const trackRequestIdRef = useRef(0);
   const secondaryTrackRequestIdRef = useRef(0);
   const lookupRequestIdRef = useRef(0);
-  const playerControlsRef = useRef<Pick<VkPlayerControls, "pause"> | undefined>(undefined);
+  const playerControlsRef = useRef<VkPlayerControls | undefined>(undefined);
   const pendingSubtitlePauseRef = useRef<PendingSubtitlePause | undefined>(undefined);
   const savedWordsMutatedRef = useRef(false);
   const removedSavedWordIdsRef = useRef(new Set<string>());
@@ -113,12 +121,9 @@ export default function App() {
     setWordLookup({ status: "idle" });
   }, []);
 
-  const handlePlayerControlsReady = useCallback(
-    (controls: Pick<VkPlayerControls, "pause"> | undefined) => {
-      playerControlsRef.current = controls;
-    },
-    [],
-  );
+  const handlePlayerControlsReady = useCallback((controls: VkPlayerControls | undefined) => {
+    playerControlsRef.current = controls;
+  }, []);
 
   const handleSubtitleWordInspect = useCallback(
     (cue: SubtitleCue, word: SubtitleWord) => {
@@ -301,6 +306,23 @@ export default function App() {
     setHeldSubtitleTimeMs(undefined);
   }, []);
 
+  const handleDurationChange = useCallback((nextDurationMs: number) => {
+    setDurationMs(nextDurationMs);
+  }, []);
+
+  const handlePlayingChange = useCallback((nextIsPlaying: boolean) => {
+    setIsPlaying(nextIsPlaying);
+  }, []);
+
+  const handleVolumeChange = useCallback((state: { volume: number; muted: boolean }) => {
+    setVolume(state.volume);
+    setMuted(state.muted);
+  }, []);
+
+  const handleAdChange = useCallback((nextIsAd: boolean) => {
+    setIsAd(nextIsAd);
+  }, []);
+
   const handleTimeUpdate = useCallback((nextTimeMs: number) => {
     const pendingPause = pendingSubtitlePauseRef.current;
 
@@ -310,11 +332,13 @@ export default function App() {
       if (playerControlsRef.current) {
         playerControlsRef.current.pause();
         setTimeMs(pendingPause.holdAtMs);
+        setCurrentTimeMs(pendingPause.holdAtMs);
         return;
       }
     }
 
     setTimeMs(nextTimeMs);
+    setCurrentTimeMs(nextTimeMs);
   }, []);
 
   const handleSubmit = useCallback(
@@ -569,8 +593,45 @@ export default function App() {
     void playerContainer?.requestFullscreen();
   }, [playerContainer]);
 
+  const handlePlayPause = useCallback(() => {
+    const controls = playerControlsRef.current;
+    if (!controls) return;
+    if (isPlaying) {
+      controls.pause();
+    } else {
+      controls.play();
+    }
+  }, [isPlaying]);
+
+  const handleSeek = useCallback((nextTimeMs: number) => {
+    playerControlsRef.current?.seek(nextTimeMs / 1000);
+    setCurrentTimeMs(nextTimeMs);
+  }, []);
+
+  const handleSetVolume = useCallback((value: number) => {
+    playerControlsRef.current?.setVolume(value);
+    setVolume(value);
+    setMuted(value === 0);
+  }, []);
+
+  const handleToggleMute = useCallback(() => {
+    const controls = playerControlsRef.current;
+    if (!controls) return;
+    if (muted) {
+      controls.unmute();
+    } else {
+      controls.mute();
+    }
+  }, [muted]);
+
+  const toggleVkMode = useCallback(() => {
+    setPlayerMode((mode) => (mode === "clean" ? "vk" : "clean"));
+  }, []);
+
   const effectiveTimeMs = heldSubtitleTimeMs ?? timeMs;
   const primaryCue = lane ? selectActiveCue(lane.cues, effectiveTimeMs) : undefined;
+  const showCustomUi = playerMode === "clean" && !isAd;
+  const blockInput = showCustomUi;
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100">
@@ -647,41 +708,91 @@ export default function App() {
                 <VideoPlayer
                   embedUrl={video.embedUrl}
                   onTimeUpdate={handleTimeUpdate}
+                  onDurationChange={handleDurationChange}
+                  onPlayingChange={handlePlayingChange}
+                  onVolumeChange={handleVolumeChange}
+                  onAdChange={handleAdChange}
                   onPlaybackStart={handlePlaybackStart}
                   onControlsReady={handlePlayerControlsReady}
+                  blockInput={blockInput}
                 />
-                <div className="pointer-events-none absolute inset-x-0 bottom-7 flex flex-col items-center gap-1 px-8">
-                  <SubtitleOverlay
-                    lane={lane}
-                    timeMs={effectiveTimeMs}
-                    wordLookup={wordLookup}
-                    onWordInspect={handleSubtitleWordInspect}
-                    onWordInspectEnd={handleSubtitleWordInspectEnd}
-                    getWordSaveControl={getWordSaveControl}
-                    popoverContainer={isFullscreen ? playerContainer : undefined}
-                  />
-                  {secondaryLane ? (
-                    <div
-                      data-testid="secondary-subtitle-slot"
-                      className="flex min-h-10 justify-center"
+
+                {showCustomUi ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-16 flex flex-col items-center gap-1 px-8">
+                    <SubtitleOverlay
+                      lane={lane}
+                      timeMs={effectiveTimeMs}
+                      wordLookup={wordLookup}
+                      onWordInspect={handleSubtitleWordInspect}
+                      onWordInspectEnd={handleSubtitleWordInspectEnd}
+                      getWordSaveControl={getWordSaveControl}
+                      popoverContainer={isFullscreen ? playerContainer : undefined}
+                    />
+                    {secondaryLane ? (
+                      <div
+                        data-testid="secondary-subtitle-slot"
+                        className="flex min-h-10 justify-center"
+                      >
+                        <SubtitleReferenceLine lane={secondaryLane} primaryCue={primaryCue} />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {showCustomUi ? (
+                  <div className="absolute inset-x-0 bottom-0 p-2">
+                    <PlayerControls
+                      isPlaying={isPlaying}
+                      currentTimeMs={currentTimeMs}
+                      durationMs={durationMs}
+                      volume={volume}
+                      muted={muted}
+                      onPlayPause={handlePlayPause}
+                      onSeek={handleSeek}
+                      onSetVolume={handleSetVolume}
+                      onToggleMute={handleToggleMute}
+                    />
+                  </div>
+                ) : null}
+
+                {!isAd ? (
+                  <div className="absolute right-2 top-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={toggleVkMode}
+                      aria-label={
+                        playerMode === "vk"
+                          ? "Back to clean controls"
+                          : "VK controls (speed, quality)"
+                      }
+                      title={
+                        playerMode === "vk"
+                          ? "Back to clean controls"
+                          : "VK controls (speed, quality)"
+                      }
+                      className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
                     >
-                      <SubtitleReferenceLine lane={secondaryLane} primaryCue={primaryCue} />
-                    </div>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                  title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                  className="absolute right-2 top-2 rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-                >
-                  {isFullscreen ? (
-                    <Minimize2 className="h-5 w-5" aria-hidden="true" />
-                  ) : (
-                    <Maximize2 className="h-5 w-5" aria-hidden="true" />
-                  )}
-                </button>
+                      {playerMode === "vk" ? (
+                        <X className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <Settings className="h-5 w-5" aria-hidden="true" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleFullscreen}
+                      aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                      title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                      className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                    >
+                      {isFullscreen ? (
+                        <Minimize2 className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <Maximize2 className="h-5 w-5" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
             <SavedWordsPanel
