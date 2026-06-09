@@ -16,6 +16,7 @@ import { normalizeSavedWord } from "@/lib/saved-words/normalize-saved-word";
 import type { SavedWord, SaveWordRequest, WordSaveControl } from "@/lib/saved-words/types";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
 import { selectActiveCue } from "@/lib/subtitles/select-active-cue";
+import { useControlsAutoHide } from "@/lib/player/use-controls-auto-hide";
 import { cn } from "@/lib/utils";
 import type { LoadedSubtitleTrack, LoadedVideo, SubtitleCue, SubtitleLane, SubtitleTrack, SubtitleWord } from "@/lib/subtitles/types";
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
@@ -632,6 +633,9 @@ export default function App() {
   const primaryCue = lane ? selectActiveCue(lane.cues, effectiveTimeMs) : undefined;
   const showCustomUi = playerMode === "clean" && !isAd;
   const blockInput = showCustomUi;
+  const { visible: controlsVisible, reveal: revealControls } = useControlsAutoHide({
+    active: isPlaying && showCustomUi,
+  });
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100">
@@ -700,9 +704,11 @@ export default function App() {
               <div
                 ref={setPlayerContainer}
                 data-testid="player-container"
+                onPointerMove={revealControls}
                 className={cn(
                   "relative aspect-video overflow-hidden bg-black",
                   isFullscreen ? "" : "rounded-md border border-slate-800",
+                  !controlsVisible && "cursor-none",
                 )}
               >
                 <VideoPlayer
@@ -740,7 +746,13 @@ export default function App() {
                 ) : null}
 
                 {showCustomUi ? (
-                  <div className="absolute inset-x-0 bottom-0 p-2">
+                  <div
+                    data-testid="player-control-bar"
+                    className={cn(
+                      "absolute inset-x-0 bottom-0 p-2 transition-opacity duration-300",
+                      controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none",
+                    )}
+                  >
                     <PlayerControls
                       isPlaying={isPlaying}
                       currentTimeMs={currentTimeMs}
@@ -756,7 +768,13 @@ export default function App() {
                 ) : null}
 
                 {!isAd ? (
-                  <div className="absolute right-2 top-2 flex gap-2">
+                  <div
+                    data-testid="player-corner-controls"
+                    className={cn(
+                      "absolute right-2 top-2 flex gap-2 transition-opacity duration-300",
+                      controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none",
+                    )}
+                  >
                     <button
                       type="button"
                       onClick={toggleVkMode}

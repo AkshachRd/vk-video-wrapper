@@ -1879,4 +1879,12 @@ describe("App player chrome", () => {
     expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
     expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("true");
   });
+
+  it("renders the auto-hide chrome wrappers visible by default", async () => {
+    render(<App />);
+    await loadAndPlay();
+
+    expect(screen.getByTestId("player-control-bar").className).toContain("opacity-100");
+    expect(screen.getByTestId("player-corner-controls").className).toContain("opacity-100");
+  });
 });
