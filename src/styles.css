@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source not "../docs";
 
 @theme {
   /* Цвета «Змейки 2» (docs/design/snake2-handoff/files/mono.css :root) */
