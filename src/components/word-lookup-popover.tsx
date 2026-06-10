@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
+import { SnakeBorder } from "@/components/snake-border";
 import type { WordLookupState } from "@/lib/dictionary/types";
 import type { WordSaveControl } from "@/lib/saved-words/types";
+import { cn } from "@/lib/utils";
 
 type WordLookupPopoverProps = {
   fallbackWord: string;
@@ -10,46 +11,89 @@ type WordLookupPopoverProps = {
   saveControl?: WordSaveControl;
 };
 
-const contentClassName = "max-w-[min(22rem,calc(100vw-2rem))] space-y-1 break-words text-left";
-const readyContentClassName =
-  "max-w-[min(22rem,calc(100vw-2rem))] space-y-3 break-words text-left";
+const monoLabelClassName =
+  "font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase text-ink-3";
 
-function PopoverWordHeader({ word }: { word: string }) {
-  return <div className="text-base font-semibold text-white break-words">{word}</div>;
+function PopoverWordHeader({ word, ipa }: { word: string; ipa?: string | null }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+      <span className="min-w-0 text-[22px] font-semibold tracking-[-0.02em] break-words text-ink">{word}</span>
+      {ipa ? <span className="font-mono text-[13px] text-ink-2">/{ipa}/</span> : null}
+    </div>
+  );
+}
+
+function SourceNote({ language, sourceUrl }: { language: string; sourceUrl: string | null }) {
+  const label = `ВИКИСЛОВАРЬ · ${language.toUpperCase()}`;
+
+  if (!sourceUrl) {
+    return <div className="mt-2 font-mono text-[10px] tracking-[0.06em] text-ink-2">{label}</div>;
+  }
+
+  return (
+    <div className="mt-2">
+      <a
+        href={sourceUrl}
+        rel="noreferrer"
+        target="_blank"
+        className="border-b border-line-2 pb-px font-mono text-[10px] tracking-[0.06em] text-ink no-underline transition-colors hover:border-ink"
+      >
+        {label} ↗
+      </a>
+    </div>
+  );
 }
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <section className="space-y-1">
-      <div className="text-[11px] font-semibold uppercase tracking-normal text-slate-400">{label}</div>
-      <div className="text-sm leading-snug text-slate-100">{children}</div>
+    <section className="space-y-[5px]">
+      <div className={monoLabelClassName}>{label}</div>
+      <div className="text-sm leading-[1.45] break-words text-ink">{children}</div>
     </section>
   );
+}
+
+function StatusNote({ children }: { children: ReactNode }) {
+  return <div className="px-[18px] pb-3.5 text-sm text-ink-2">{children}</div>;
 }
 
 function SavedWordButton({ control }: { control?: WordSaveControl }) {
   if (!control) return null;
 
   const labels = {
-    unsaved: "Сохранить",
+    unsaved: "Сохранить слово",
     saving: "Сохраняю...",
     saved: "Сохранено",
     removing: "Удаляю...",
     unavailable: "Сохранение недоступно",
   };
+  const isSavedLook = control.status === "saved" || control.status === "removing";
 
   return (
-    <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
-      <Button
+    <div className="space-y-2 px-[18px] pt-1 pb-4">
+      <button
         type="button"
-        className="h-8 w-full"
-        variant={control.status === "saved" ? "secondary" : "default"}
-        disabled={control.status === "saving" || control.status === "removing" || control.status === "unavailable"}
+        disabled={
+          control.status === "saving" || control.status === "removing" || control.status === "unavailable"
+        }
         onClick={control.onToggle}
+        className={cn(
+          "group/snake relative flex w-full items-center justify-center gap-[9px] rounded-full p-3 text-[13px] font-medium tracking-[0.01em] [transition:translate_0.3s_var(--ease-spring),background-color_0.2s,color_0.2s] disabled:opacity-60",
+          isSavedLook
+            ? "bg-paper-2 text-ink shadow-[inset_0_0_0_1.5px_var(--color-line-2)]"
+            : "bg-ink text-paper hover:-translate-y-px",
+        )}
       >
+        {control.status === "saved" ? (
+          <span
+            aria-hidden="true"
+            className="h-[7px] w-[13px] -rotate-45 scale-0 animate-chkin border-b-2 border-l-2 border-current motion-reduce:scale-100 motion-reduce:animate-none"
+          />
+        ) : null}
         {labels[control.status]}
-      </Button>
-      {control.error ? <div className="text-xs text-red-300">{control.error}</div> : null}
+        {control.status === "unsaved" || control.status === "saved" ? <SnakeBorder shape="pill" /> : null}
+      </button>
+      {control.error ? <div className="px-1 text-xs text-ink-2">{control.error}</div> : null}
     </div>
   );
 }
@@ -57,8 +101,10 @@ function SavedWordButton({ control }: { control?: WordSaveControl }) {
 export function WordLookupPopover({ fallbackWord, lookup, saveControl }: WordLookupPopoverProps) {
   if (lookup.status === "idle") {
     return (
-      <div>
-        <span className="font-medium text-white break-words">{fallbackWord}</span>
+      <div className="break-words text-left">
+        <div className="px-[18px] pt-4 pb-3">
+          <PopoverWordHeader word={fallbackWord} />
+        </div>
         <SavedWordButton control={saveControl} />
       </div>
     );
@@ -66,9 +112,17 @@ export function WordLookupPopover({ fallbackWord, lookup, saveControl }: WordLoo
 
   if (lookup.status === "loading") {
     return (
-      <div className={contentClassName}>
-        <PopoverWordHeader word={lookup.query || fallbackWord} />
-        <div className="text-sm text-slate-300">Ищу в словаре...</div>
+      <div className="break-words text-left">
+        <div className="px-[18px] pt-4 pb-3">
+          <PopoverWordHeader word={lookup.query || fallbackWord} />
+        </div>
+        <div className="flex items-center gap-[9px] px-[18px] pb-3.5 font-mono text-xs tracking-[0.04em] text-ink-2">
+          <span
+            aria-hidden="true"
+            className="h-3 w-3 animate-spin rounded-full border-2 border-line-2 border-t-ink motion-reduce:animate-none"
+          />
+          Ищу в словаре...
+        </div>
         <SavedWordButton control={saveControl} />
       </div>
     );
@@ -76,9 +130,11 @@ export function WordLookupPopover({ fallbackWord, lookup, saveControl }: WordLoo
 
   if (lookup.status === "not-found") {
     return (
-      <div className={contentClassName}>
-        <PopoverWordHeader word={fallbackWord} />
-        <div className="text-sm text-slate-300">Слово не найдено в словаре</div>
+      <div className="break-words text-left">
+        <div className="px-[18px] pt-4 pb-3">
+          <PopoverWordHeader word={fallbackWord} />
+        </div>
+        <StatusNote>Слово не найдено в словаре</StatusNote>
         <SavedWordButton control={saveControl} />
       </div>
     );
@@ -86,9 +142,11 @@ export function WordLookupPopover({ fallbackWord, lookup, saveControl }: WordLoo
 
   if (lookup.status === "unavailable") {
     return (
-      <div className={contentClassName}>
-        <PopoverWordHeader word={fallbackWord} />
-        <div className="text-sm text-slate-300">Словарь сейчас недоступен</div>
+      <div className="break-words text-left">
+        <div className="px-[18px] pt-4 pb-3">
+          <PopoverWordHeader word={fallbackWord} />
+        </div>
+        <StatusNote>Словарь сейчас недоступен</StatusNote>
         <SavedWordButton control={saveControl} />
       </div>
     );
@@ -98,35 +156,28 @@ export function WordLookupPopover({ fallbackWord, lookup, saveControl }: WordLoo
   const grammarText = [data.partOfSpeech, ...data.grammar].filter(Boolean).join(", ");
 
   return (
-    <div className={readyContentClassName}>
-      <div className="space-y-1">
-        <PopoverWordHeader word={data.headword} />
-        {data.ipa ? <div className="text-sm text-slate-300 break-words">/{data.ipa}/</div> : null}
-        {data.sourceUrl ? (
-          <a
-            href={data.sourceUrl}
-            rel="noreferrer"
-            target="_blank"
-            className="text-[11px] text-sky-300 break-words hover:text-sky-200"
-          >
-            {data.source}
-          </a>
-        ) : (
-          <div className="text-[11px] text-slate-400 break-words">{data.source}</div>
-        )}
+    <div className="break-words text-left">
+      <div className="px-[18px] pt-4 pb-3">
+        <PopoverWordHeader word={data.headword} ipa={data.ipa} />
+        <SourceNote language={data.language} sourceUrl={data.sourceUrl} />
       </div>
 
-      <Section label="Значение">
-        <div className="space-y-1">
-          {data.meanings.map((meaning) => (
-            <div key={meaning} className="break-words">
-              {meaning}
-            </div>
-          ))}
-        </div>
-      </Section>
+      <div className="space-y-[13px] px-[18px] pt-1 pb-3.5">
+        <Section label="Значение">
+          <div className="space-y-[3px]">
+            {data.meanings.map((meaning) => (
+              <div key={meaning}>{meaning}</div>
+            ))}
+          </div>
+        </Section>
 
-      {grammarText ? <Section label="Грамматика">{grammarText}</Section> : null}
+        {grammarText ? (
+          <Section label="Грамматика">
+            <span className="font-mono text-[13px]">{grammarText}</span>
+          </Section>
+        ) : null}
+      </div>
+
       <SavedWordButton control={saveControl} />
     </div>
   );

@@ -137,7 +137,7 @@ describe("SubtitleOverlay", () => {
 
     await user.click(screen.getByRole("button", { name: "утро!" }));
 
-    expect(screen.getByRole("button", { name: "Сохранить" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Сохранить слово" })).toBeInTheDocument();
   });
 
   it("does not show lookup state for a different word", async () => {

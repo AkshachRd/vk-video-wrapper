@@ -48,7 +48,7 @@ describe("WordLookupPopover", () => {
     expect(screen.getByText("Грамматика")).toBeInTheDocument();
     expect(screen.getByText(/местоимение/)).toBeInTheDocument();
     expect(screen.getByText(/1-е лицо/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "ruwiktionary-kaikki" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "ВИКИСЛОВАРЬ · DE ↗" })).toHaveAttribute(
       "href",
       "https://kaikki.org/ruwiktionary/Немецкий/meaning/w/wi/wir.html",
     );
@@ -133,7 +133,7 @@ describe("WordLookupPopover", () => {
 
     expect(screen.getByText("дом")).toBeInTheDocument();
     expect(screen.getByText("жилище")).toBeInTheDocument();
-    expect(screen.getByText("ruwiktionary-kaikki")).toBeInTheDocument();
+    expect(screen.getByText("ВИКИСЛОВАРЬ · RU")).toBeInTheDocument();
     expect(screen.queryByText("/null/")).not.toBeInTheDocument();
     expect(screen.queryByText("Грамматика")).not.toBeInTheDocument();
   });
@@ -171,7 +171,7 @@ describe("WordLookupPopover", () => {
       />,
     );
 
-    expect(container.firstElementChild).toHaveClass("max-w-[min(22rem,calc(100vw-2rem))]");
+    expect(container.firstElementChild).toHaveClass("text-left");
     expect(container.firstElementChild).toHaveClass("break-words");
   });
 
@@ -186,7 +186,7 @@ describe("WordLookupPopover", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить слово" }));
 
     expect(onToggle).toHaveBeenCalledTimes(1);
   });

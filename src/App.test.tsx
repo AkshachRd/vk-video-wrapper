@@ -532,7 +532,7 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Welt" }));
     await screen.findByText("мир");
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить слово" }));
 
     expect(mocks.invoke).toHaveBeenCalledWith("save_word", {
       payload: {
@@ -598,7 +598,7 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Welt" }));
     await screen.findByText("мир");
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить слово" }));
 
     const savedWordsPanel = screen.getByRole("region", { name: "Сохраненные слова" });
     expect(await screen.findByText("Сохранено")).toBeInTheDocument();
@@ -702,7 +702,7 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Welt" }));
     await screen.findByText("мир");
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить слово" }));
 
     expect(await screen.findByText("Не удалось сохранить слово")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Слово: Welt" })).toBeInTheDocument();
@@ -1261,7 +1261,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Hello" }));
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить слово" }));
 
     expect(mocks.invoke.mock.calls.some(([command]) => command === "lookup_word")).toBe(false);
     expect(mocks.invoke).toHaveBeenCalledWith("save_word", {
