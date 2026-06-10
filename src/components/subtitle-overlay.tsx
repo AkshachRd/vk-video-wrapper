@@ -70,7 +70,7 @@ export function SubtitleOverlay({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="relative mx-1 inline-block px-px text-ink outline-none after:absolute after:inset-x-0 after:-bottom-[5px] after:h-[5px] after:origin-left after:scale-x-0 after:bg-(image:--wave-ink) after:bg-position-[50%_50%] after:bg-size-[11px_5px] after:bg-repeat-x after:opacity-85 after:transition-transform after:duration-300 after:ease-spring after:content-[''] hover:after:scale-x-100 hover:after:animate-uslither focus-visible:after:scale-x-100 aria-expanded:after:scale-x-100 aria-expanded:after:animate-uslither motion-reduce:after:animate-none"
+                className="relative mx-1 inline-block px-px text-ink outline-none after:absolute after:inset-x-0 after:-bottom-[5px] after:h-[5px] after:origin-left after:scale-x-0 after:bg-(image:--wave-ink) after:bg-position-[50%_50%] after:bg-size-[11px_5px] after:bg-repeat-x after:opacity-85 after:transition-transform after:duration-300 after:ease-spring after:content-[''] hover:after:scale-x-100 motion-safe:hover:after:animate-uslither focus-visible:after:scale-x-100 aria-expanded:after:scale-x-100 motion-safe:aria-expanded:after:animate-uslither"
               >
                 {word.text}
               </button>
