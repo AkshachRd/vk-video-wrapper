@@ -49,7 +49,7 @@ export function SubtitleOverlay({
   if (!cue) return null;
 
   return (
-    <div className="pointer-events-auto max-w-4xl rounded-md bg-black/70 px-4 py-3 text-center text-2xl leading-relaxed text-white shadow-lg">
+    <div className="pointer-events-auto max-w-[92%] rounded-card bg-paper px-[22px] py-[13px] text-center text-[22px] leading-[1.45] font-[450] tracking-[-0.01em] text-ink shadow-[0_16px_40px_-16px_rgba(0,0,0,0.55)]">
       {cue.words.map((word) => {
         const fallbackWord = word.cleanText || word.text;
         const lookup = lookupForWord(wordLookup, fallbackWord);
@@ -70,12 +70,12 @@ export function SubtitleOverlay({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="mx-1 rounded-sm px-1 text-white underline-offset-4 transition-colors hover:bg-white/15 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                className="relative mx-1 inline-block px-px text-ink outline-none after:absolute after:inset-x-0 after:-bottom-[5px] after:h-[5px] after:origin-left after:scale-x-0 after:bg-(image:--wave-ink) after:bg-position-[50%_50%] after:bg-size-[11px_5px] after:bg-repeat-x after:opacity-85 after:transition-transform after:duration-300 after:ease-spring after:content-[''] hover:after:scale-x-100 hover:after:animate-uslither focus-visible:after:scale-x-100 aria-expanded:after:scale-x-100 aria-expanded:after:animate-uslither motion-reduce:after:animate-none"
               >
                 {word.text}
               </button>
             </PopoverTrigger>
-            <PopoverContent aria-label={`Слово: ${fallbackWord}`} container={popoverContainer}>
+            <PopoverContent aria-label={`Слово: ${fallbackWord}`} container={popoverContainer} className="w-[282px]">
               <WordLookupPopover fallbackWord={fallbackWord} lookup={lookup} saveControl={saveControl} />
             </PopoverContent>
           </Popover>

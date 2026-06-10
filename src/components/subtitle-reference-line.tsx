@@ -11,7 +11,7 @@ export function SubtitleReferenceLine({ lane, primaryCue }: SubtitleReferenceLin
   if (!cue) return null;
 
   return (
-    <div className="max-w-4xl rounded-md bg-black/60 px-3 py-1.5 text-center text-lg leading-relaxed text-slate-200/90 shadow">
+    <div className="max-w-[88%] rounded-full bg-[rgba(10,10,10,0.78)] px-4 py-[7px] text-center text-[14.5px] text-white backdrop-blur-[3px]">
       {cue.text}
     </div>
   );
