@@ -927,7 +927,7 @@ export function RecentVideosList({
                     onClick={() => onSelect(video)}
                     aria-label={title}
                     style={{ animationDelay: `${index * 0.06}s` }}
-                    className="group/snake relative block w-full animate-cardrise rounded-card bg-paper text-left [transition:transform_0.35s_var(--ease-spring),box-shadow_0.35s_var(--ease-soft)] hover:-translate-y-1 hover:shadow-[0_22px_40px_-24px_rgba(0,0,0,0.4)] motion-reduce:animate-none"
+                    className="group/snake relative block w-full animate-cardrise rounded-card bg-paper text-left [transition:translate_0.35s_var(--ease-spring),box-shadow_0.35s_var(--ease-soft)] hover:-translate-y-1 hover:shadow-[0_22px_40px_-24px_rgba(0,0,0,0.4)] motion-reduce:animate-none"
                   >
                     <span className="relative block aspect-video overflow-hidden rounded-card bg-[radial-gradient(130%_130%_at_50%_30%,#1c1c1c_0%,#0a0a0a_80%)]">
                       <RecentThumbnail url={video.thumbnailUrl} />
@@ -949,7 +949,7 @@ export function RecentVideosList({
                     type="button"
                     onClick={() => onRemove(video)}
                     aria-label={`Удалить из истории: ${title}`}
-                    className="absolute top-2.5 right-2.5 z-[2] flex h-[26px] w-[26px] scale-[0.8] items-center justify-center rounded-full bg-white/90 text-ink opacity-0 [transition:opacity_0.2s,transform_0.3s_var(--ease-spring),background-color_0.15s,color_0.15s] group-hover/card:scale-100 group-hover/card:opacity-100 hover:bg-ink hover:text-paper focus-visible:scale-100 focus-visible:opacity-100"
+                    className="absolute top-2.5 right-2.5 z-[2] flex h-[26px] w-[26px] scale-[0.8] items-center justify-center rounded-full bg-white/90 text-ink opacity-0 [transition:opacity_0.2s,scale_0.3s_var(--ease-spring),background-color_0.15s,color_0.15s] group-hover/card:scale-100 group-hover/card:opacity-100 hover:bg-ink hover:text-paper focus-visible:scale-100 focus-visible:opacity-100"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -1179,7 +1179,7 @@ Expected: FAIL — `Unable to find an element by: [data-testid="playing-indicato
                   ? "Вернуться к своим контролам"
                   : "Настройки VK (скорость, качество)"
               }
-              className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,transform_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
+              className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
             >
               {playerMode === "vk" ? (
                 <X className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -1193,7 +1193,7 @@ Expected: FAIL — `Unable to find an element by: [data-testid="playing-indicato
               onClick={toggleFullscreen}
               aria-label={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
               title={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
-              className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,transform_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
+              className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
             >
               {isFullscreen ? (
                 <Minimize2 className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -1326,7 +1326,7 @@ type PlayerControlsProps = {
 
 // Круглая кнопка контролбара; экспортируется для кнопки субтитров в App.
 export const playerControlButtonClassName =
-  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink [transition:background-color_0.18s_var(--ease-soft),transform_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink";
+  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink [transition:background-color_0.18s_var(--ease-soft),scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink";
 
 export function PlayerControls({
   isPlaying,
@@ -1758,7 +1758,7 @@ function SavedWordButton({ control }: { control?: WordSaveControl }) {
         }
         onClick={control.onToggle}
         className={cn(
-          "group/snake relative flex w-full items-center justify-center gap-[9px] rounded-full p-3 text-[13px] font-medium tracking-[0.01em] [transition:transform_0.3s_var(--ease-spring),background-color_0.2s,color_0.2s] disabled:opacity-60",
+          "group/snake relative flex w-full items-center justify-center gap-[9px] rounded-full p-3 text-[13px] font-medium tracking-[0.01em] [transition:translate_0.3s_var(--ease-spring),background-color_0.2s,color_0.2s] disabled:opacity-60",
           isSavedLook
             ? "bg-paper-2 text-ink shadow-[inset_0_0_0_1.5px_var(--color-line-2)]"
             : "bg-ink text-paper hover:-translate-y-px",
