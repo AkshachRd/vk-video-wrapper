@@ -1107,7 +1107,7 @@ Expected: FAIL — `Unable to find an element by: [data-testid="playing-indicato
           <div
             data-testid="playing-indicator"
             className={cn(
-              "absolute top-[15px] left-4 z-[6] flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] text-white/75 transition-opacity duration-300",
+              "pointer-events-none absolute top-[15px] left-4 z-[6] flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] text-white/75 transition-opacity duration-300",
               controlsVisible ? "opacity-100" : "opacity-0",
             )}
           >
