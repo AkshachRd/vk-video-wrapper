@@ -51,7 +51,8 @@ any form; the app remains `vk-video-wrapper`.
   - Colors: `--color-paper #ffffff`, `--color-paper-2 #f6f6f6`,
     `--color-paper-3 #efefef`, `--color-ink #0c0c0c`, `--color-ink-2 #707070`,
     `--color-ink-3 #a8a8a8`, `--color-line #e9e9e9`, `--color-line-2 #dcdcdc`,
-    `--color-well #0a0a0a` (video well), page background `#e9e9e7`.
+    `--color-well #0a0a0a` (video well), `--color-page #e9e9e7` (behind the
+    window card).
   - Radii: `--radius-card 20px`, `--radius-card-sm 12px`, `--radius-card-lg 25px`;
     pills use the built-in `rounded-full`.
   - Fonts: `--font-sans "IBM Plex Sans Variable", system-ui, sans-serif`,
