@@ -85,7 +85,7 @@
     to { background-position-x: 11px; }
   }
   @keyframes chkin {
-    to { transform: rotate(-45deg) scale(1); }
+    to { scale: 1; }
   }
 }
 
