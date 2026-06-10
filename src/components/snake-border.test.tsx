@@ -46,6 +46,23 @@ describe("SnakeBorder", () => {
     expect(window.cancelAnimationFrame).toHaveBeenCalled();
   });
 
+  it("stops the animation and removes listeners on unmount", () => {
+    const result = render(
+      <button type="button" className="group/snake relative">
+        hover me
+        <SnakeBorder />
+      </button>,
+    );
+    const host = result.getByRole("button");
+
+    fireEvent.mouseEnter(host);
+    expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1);
+
+    result.unmount();
+
+    expect(window.cancelAnimationFrame).toHaveBeenCalled();
+  });
+
   it("keeps the ring static under prefers-reduced-motion", () => {
     vi.stubGlobal(
       "matchMedia",
