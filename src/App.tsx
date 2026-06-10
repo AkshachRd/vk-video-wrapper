@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { RecentVideosList } from "@/components/recent-videos-list";
 import { SavedWordsPanel } from "@/components/saved-words-panel";
 import { SubtitleOverlay } from "@/components/subtitle-overlay";
-import { PlayerControls } from "@/components/player-controls";
+import { PlayerControls, playerControlButtonClassName } from "@/components/player-controls";
 import { SubtitleReferenceLine } from "@/components/subtitle-reference-line";
 import { VideoPlayer } from "@/components/video-player";
 import { getSupportedLookupLanguage } from "@/lib/dictionary/supported-lookup-language";
@@ -37,6 +37,15 @@ const TRACK_PARSE_ERROR = "Не удалось разобрать субтитр
 const SAVE_WORD_ERROR = "Не удалось сохранить слово";
 const REMOVE_WORD_ERROR = "Не удалось удалить слово";
 const SECONDARY_TRACK_ERROR = "Не удалось загрузить вторую дорожку.";
+
+const trackSelectWrapClassName =
+  "relative block rounded-full border-[1.5px] border-line-2 bg-paper transition-colors duration-200 focus-within:border-ink after:pointer-events-none after:absolute after:top-1/2 after:right-4 after:h-[7px] after:w-[7px] after:-translate-y-[65%] after:rotate-45 after:border-r-2 after:border-b-2 after:border-ink-2 after:content-['']";
+
+const trackSelectClassName =
+  "w-full cursor-pointer appearance-none rounded-full border-0 bg-transparent py-2.5 pr-9 pl-4 text-sm text-ink outline-none disabled:opacity-50";
+
+const monoLabelClassName =
+  "font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase";
 
 type PendingSubtitlePause = {
   stopAtMs: number;
@@ -734,54 +743,57 @@ export default function App() {
             type="button"
             aria-label="Субтитры и перевод"
             title="Субтитры и перевод"
-            className="rounded p-1 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            className={playerControlButtonClassName}
           >
-            <Captions className="h-5 w-5" aria-hidden="true" />
+            <Captions className="h-[18px] w-[18px]" aria-hidden="true" />
           </button>
         </PopoverTrigger>
         <PopoverContent
           align="end"
           side="top"
+          sideOffset={10}
           container={isFullscreen ? playerContainer : undefined}
-          className="w-64"
+          className="w-[262px] p-4"
         >
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1 text-sm text-slate-300">
-              <span>Субтитры</span>
-              <select
-                aria-label="Субтитры"
-                value={selectedTrackId}
-                disabled={isTrackLoading}
-                onChange={handleTrackChange}
-                className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
-              >
-                {video.tracks.map((track) => (
-                  <option key={track.id} value={track.id}>
-                    {formatTrackLabel(track)}
-                  </option>
-                ))}
-              </select>
+          <div className="flex flex-col gap-3.5">
+            <label className="flex flex-col gap-[7px]">
+              <span className={cn(monoLabelClassName, "text-ink-2")}>Субтитры</span>
+              <span className={trackSelectWrapClassName}>
+                <select
+                  aria-label="Субтитры"
+                  value={selectedTrackId}
+                  disabled={isTrackLoading}
+                  onChange={handleTrackChange}
+                  className={trackSelectClassName}
+                >
+                  {video.tracks.map((track) => (
+                    <option key={track.id} value={track.id}>
+                      {formatTrackLabel(track)}
+                    </option>
+                  ))}
+                </select>
+              </span>
             </label>
-            <label className="flex flex-col gap-1 text-sm text-slate-300">
-              <span>Перевод</span>
-              <select
-                aria-label="Перевод"
-                value={selectedSecondaryTrackId}
-                disabled={isSecondaryTrackLoading}
-                onChange={handleSecondaryTrackChange}
-                className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50"
-              >
-                <option value="">Нет</option>
-                {video.tracks.map((track) => (
-                  <option key={track.id} value={track.id}>
-                    {formatTrackLabel(track)}
-                  </option>
-                ))}
-              </select>
+            <label className="flex flex-col gap-[7px]">
+              <span className={cn(monoLabelClassName, "text-ink-2")}>Перевод</span>
+              <span className={trackSelectWrapClassName}>
+                <select
+                  aria-label="Перевод"
+                  value={selectedSecondaryTrackId}
+                  disabled={isSecondaryTrackLoading}
+                  onChange={handleSecondaryTrackChange}
+                  className={trackSelectClassName}
+                >
+                  <option value="">Нет</option>
+                  {video.tracks.map((track) => (
+                    <option key={track.id} value={track.id}>
+                      {formatTrackLabel(track)}
+                    </option>
+                  ))}
+                </select>
+              </span>
             </label>
-            {secondaryError ? (
-              <span className="text-sm text-amber-300">{secondaryError}</span>
-            ) : null}
+            {secondaryError ? <span className="text-sm text-ink-2">{secondaryError}</span> : null}
           </div>
         </PopoverContent>
       </Popover>
@@ -982,7 +994,7 @@ export default function App() {
                             ? "Вернуться к своим контролам"
                             : "Настройки VK (скорость, качество)"
                         }
-                        className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
+                        className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/94 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
                       >
                         {playerMode === "vk" ? (
                           <X className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -996,7 +1008,7 @@ export default function App() {
                         onClick={toggleFullscreen}
                         aria-label={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
                         title={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
-                        className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
+                        className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/94 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
                       >
                         {isFullscreen ? (
                           <Minimize2 className="h-[18px] w-[18px]" aria-hidden="true" />

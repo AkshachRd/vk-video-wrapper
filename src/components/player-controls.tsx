@@ -35,7 +35,7 @@ export function PlayerControls({
   const volumeValue = muted ? 0 : volume;
 
   return (
-    <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-white/95 px-3 py-[7px] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.4)]">
+    <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-white/96 px-3 py-[7px] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.4)]">
       <button
         type="button"
         aria-label={isPlaying ? "Пауза" : "Воспроизвести"}
