@@ -51,7 +51,7 @@ export function RecentVideosList({
                     onClick={() => onSelect(video)}
                     aria-label={title}
                     style={{ animationDelay: `${index * 0.06}s` }}
-                    className="group/snake relative block w-full animate-cardrise rounded-card bg-paper text-left [transition:transform_0.35s_var(--ease-spring),box-shadow_0.35s_var(--ease-soft)] hover:-translate-y-1 hover:shadow-[0_22px_40px_-24px_rgba(0,0,0,0.4)] motion-reduce:animate-none"
+                    className="group/snake relative block w-full animate-cardrise rounded-card bg-paper text-left [transition:translate_0.35s_var(--ease-spring),box-shadow_0.35s_var(--ease-soft)] hover:-translate-y-1 hover:shadow-[0_22px_40px_-24px_rgba(0,0,0,0.4)] motion-reduce:animate-none"
                   >
                     <span className="relative block aspect-video overflow-hidden rounded-card bg-[radial-gradient(130%_130%_at_50%_30%,#1c1c1c_0%,#0a0a0a_80%)]">
                       <RecentThumbnail url={video.thumbnailUrl} />
@@ -73,7 +73,7 @@ export function RecentVideosList({
                     type="button"
                     onClick={() => onRemove(video)}
                     aria-label={`Удалить из истории: ${title}`}
-                    className="absolute top-2.5 right-2.5 z-[2] flex h-[26px] w-[26px] scale-[0.8] items-center justify-center rounded-full bg-white/90 text-ink opacity-0 [transition:opacity_0.2s,transform_0.3s_var(--ease-spring),background-color_0.15s,color_0.15s] group-hover/card:scale-100 group-hover/card:opacity-100 hover:bg-ink hover:text-paper focus-visible:scale-100 focus-visible:opacity-100"
+                    className="absolute top-2.5 right-2.5 z-[2] flex h-[26px] w-[26px] scale-[0.8] items-center justify-center rounded-full bg-white/90 text-ink opacity-0 [transition:opacity_0.2s,scale_0.3s_var(--ease-spring),background-color_0.15s,color_0.15s] group-hover/card:scale-100 group-hover/card:opacity-100 hover:bg-ink hover:text-paper focus-visible:scale-100 focus-visible:opacity-100"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
