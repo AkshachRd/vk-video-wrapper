@@ -71,7 +71,7 @@ describe("SubtitleOverlay", () => {
 
     await user.click(screen.getByRole("button", { name: "утро!" }));
 
-    expect(screen.getByRole("dialog", { name: "Word details: утро" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Слово: утро" })).toBeInTheDocument();
     expect(screen.getByText("утро")).toBeInTheDocument();
   });
 

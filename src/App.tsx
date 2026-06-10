@@ -25,16 +25,16 @@ import type { LoadedSubtitleTrack, LoadedVideo, SubtitleCue, SubtitleLane, Subti
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
 
 const LOAD_ERROR_MESSAGES: Record<string, string> = {
-  "invalid-link": "This does not look like a public VK Video link.",
-  "video-unavailable": "This video is unavailable without VK login or cannot be opened.",
-  "subtitles-not-found": "Subtitles were not found for this video.",
-  "subtitle-fetch-failed": "The subtitle file could not be downloaded.",
-  "subtitle-parse-failed": "Subtitles could not be parsed for this video.",
+  "invalid-link": "Это не похоже на публичную ссылку VK Video.",
+  "video-unavailable": "Видео недоступно без входа в VK или не может быть открыто.",
+  "subtitles-not-found": "Субтитры для этого видео не найдены.",
+  "subtitle-fetch-failed": "Не удалось скачать файл субтитров.",
+  "subtitle-parse-failed": "Не удалось разобрать субтитры этого видео.",
 };
 
-const UNKNOWN_LOAD_ERROR = "The video could not be loaded.";
-const SUBTITLE_PARSE_ERROR = "Subtitles could not be parsed for this video.";
-const TRACK_PARSE_ERROR = "Subtitles could not be parsed for this track.";
+const UNKNOWN_LOAD_ERROR = "Не удалось загрузить видео.";
+const SUBTITLE_PARSE_ERROR = "Не удалось разобрать субтитры этого видео.";
+const TRACK_PARSE_ERROR = "Не удалось разобрать субтитры этой дорожки.";
 const SAVE_WORD_ERROR = "Не удалось сохранить слово";
 const REMOVE_WORD_ERROR = "Не удалось удалить слово";
 const SECONDARY_TRACK_ERROR = "Не удалось загрузить вторую дорожку.";
@@ -750,7 +750,7 @@ export default function App() {
             <label className="flex flex-col gap-1 text-sm text-slate-300">
               <span>Субтитры</span>
               <select
-                aria-label="Subtitles"
+                aria-label="Субтитры"
                 value={selectedTrackId}
                 disabled={isTrackLoading}
                 onChange={handleTrackChange}
@@ -793,13 +793,13 @@ export default function App() {
       <form className="mx-auto flex max-w-7xl gap-2" onSubmit={handleSubmit}>
         <Input
           aria-label="VK Video URL"
-          placeholder="https://vkvideo.ru/video-..."
+          placeholder="вставь ссылку vkvideo.ru/video…"
           value={url}
           disabled={isLoading}
           onChange={(event) => setUrl(event.target.value)}
         />
         <Button type="submit" disabled={isLoading}>
-          {isLoading ? "Loading..." : "Load"}
+          {isLoading ? "Загрузка" : "Загрузить"}
         </Button>
       </form>
 
@@ -824,7 +824,7 @@ export default function App() {
               onClick={handleBackToList}
               className="mb-3 text-sm text-slate-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
             >
-              ← К списку
+              ← Назад
             </button>
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="space-y-3">
@@ -854,7 +854,7 @@ export default function App() {
                   <button
                     type="button"
                     tabIndex={-1}
-                    aria-label="Play/pause video"
+                    aria-label="Воспроизведение или пауза"
                     data-testid="player-click-surface"
                     onClick={handlePlayPause}
                     className={cn(
@@ -922,13 +922,13 @@ export default function App() {
                       onClick={toggleVkMode}
                       aria-label={
                         playerMode === "vk"
-                          ? "Back to clean controls"
-                          : "VK controls (speed, quality)"
+                          ? "Вернуться к своим контролам"
+                          : "Настройки VK (скорость, качество)"
                       }
                       title={
                         playerMode === "vk"
-                          ? "Back to clean controls"
-                          : "VK controls (speed, quality)"
+                          ? "Вернуться к своим контролам"
+                          : "Настройки VK (скорость, качество)"
                       }
                       className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
                     >
@@ -941,8 +941,8 @@ export default function App() {
                     <button
                       type="button"
                       onClick={toggleFullscreen}
-                      aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                      title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                      aria-label={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
+                      title={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
                       className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
                     >
                       {isFullscreen ? (
@@ -975,7 +975,7 @@ export default function App() {
 
 function formatTrackLabel(track: SubtitleTrack): string {
   const label = track.manifestName || track.title || track.lang || track.id;
-  return track.isAuto ? `${label} auto` : label;
+  return track.isAuto ? `${label} (авто)` : label;
 }
 
 function savedWordKey(language: string, normalizedWord: string): string {
@@ -1034,13 +1034,13 @@ function mapTrackLoadError(error: unknown): string {
 
   switch (code) {
     case "subtitles-not-found":
-      return "This subtitle track is no longer available.";
+      return "Эта дорожка субтитров больше недоступна.";
     case "subtitle-fetch-failed":
-      return "The subtitle file could not be downloaded.";
+      return "Не удалось скачать файл субтитров.";
     case "subtitle-parse-failed":
       return TRACK_PARSE_ERROR;
     default:
-      return "The subtitle track could not be loaded.";
+      return "Не удалось загрузить дорожку субтитров.";
   }
 }
 

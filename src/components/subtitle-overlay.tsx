@@ -75,7 +75,7 @@ export function SubtitleOverlay({
                 {word.text}
               </button>
             </PopoverTrigger>
-            <PopoverContent aria-label={`Word details: ${fallbackWord}`} container={popoverContainer}>
+            <PopoverContent aria-label={`Слово: ${fallbackWord}`} container={popoverContainer}>
               <WordLookupPopover fallbackWord={fallbackWord} lookup={lookup} saveControl={saveControl} />
             </PopoverContent>
           </Popover>

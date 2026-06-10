@@ -306,7 +306,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "  https://vkvideo.ru/video-1_2  ");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(mocks.invoke).toHaveBeenCalledWith("load_video_from_url", {
       url: "https://vkvideo.ru/video-1_2",
@@ -348,7 +348,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(await screen.findByRole("region", { name: "Сохраненные слова" })).toBeInTheDocument();
     expect(screen.getByText("Welt")).toBeInTheDocument();
@@ -383,7 +383,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(await screen.findByText("Список слов недоступен")).toBeInTheDocument();
 
@@ -424,7 +424,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     expect(await screen.findByText("Welt")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Удалить Welt" }));
@@ -472,7 +472,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     expect(await screen.findByText("Welt")).toBeInTheDocument();
 
     const removeButton = screen.getByRole("button", { name: "Удалить Welt" });
@@ -528,7 +528,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Welt" }));
     await screen.findByText("мир");
@@ -594,7 +594,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Welt" }));
     await screen.findByText("мир");
@@ -655,7 +655,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Welt" }));
     await user.click(await screen.findByRole("button", { name: "Сохранено" }));
@@ -698,14 +698,14 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Welt" }));
     await screen.findByText("мир");
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(await screen.findByText("Не удалось сохранить слово")).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Word details: Welt" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Слово: Welt" })).toBeInTheDocument();
   });
 
   it("maps serialized subtitle-not-found backend errors to a user-facing message", async () => {
@@ -723,10 +723,33 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(
-      await screen.findByText("Subtitles were not found for this video."),
+      await screen.findByText("Субтитры для этого видео не найдены."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the Russian invalid-link error", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      return Promise.reject(
+        JSON.stringify({
+          kind: "invalid-link",
+          message: "invalid-link",
+        }),
+      );
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://example.com/not-vk");
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
+
+    expect(
+      await screen.findByText("Это не похоже на публичную ссылку VK Video."),
     ).toBeInTheDocument();
   });
 
@@ -740,10 +763,10 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(
-      await screen.findByText("Subtitles were not found for this video."),
+      await screen.findByText("Субтитры для этого видео не найдены."),
     ).toBeInTheDocument();
   });
 
@@ -763,10 +786,10 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(
-      await screen.findByText("Subtitles could not be parsed for this video."),
+      await screen.findByText("Не удалось разобрать субтитры этого видео."),
     ).toBeInTheDocument();
   });
 
@@ -779,10 +802,10 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(
-      await screen.findByText("Subtitles could not be parsed for this video."),
+      await screen.findByText("Не удалось разобрать субтитры этого видео."),
     ).toBeInTheDocument();
   });
 
@@ -792,7 +815,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "   ");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(mocks.invoke.mock.calls.some(([command]) => command === "load_video_from_url")).toBe(false);
   });
@@ -812,10 +835,10 @@ describe("App", () => {
 
     const input = screen.getByLabelText("VK Video URL");
     await user.type(input, "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(input).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Loading..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Загрузка/ })).toBeDisabled();
 
     await user.keyboard("{Enter}");
 
@@ -843,15 +866,15 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     await openSubtitlesMenu(user);
-    const select = await screen.findByRole("combobox", { name: "Subtitles" });
+    const select = await screen.findByRole("combobox", { name: "Субтитры" });
 
     expect(select).toHaveValue("ru_0_ru.vtt");
     expect(within(select).getByRole("option", { name: "Русский" })).toBeInTheDocument();
     expect(within(select).getByRole("option", { name: "Deutsch" })).toBeInTheDocument();
-    expect(within(select).getByRole("option", { name: "ru_auto.vtt auto" })).toBeInTheDocument();
+    expect(within(select).getByRole("option", { name: "ru_auto.vtt (авто)" })).toBeInTheDocument();
   });
 
   it("loads a selected subtitle track and updates rendered words", async () => {
@@ -878,9 +901,9 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await openSubtitlesMenu(user);
-    await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Субтитры" }), "de_1_de.vtt");
 
     expect(mocks.invoke).toHaveBeenCalledWith("load_subtitle_track", {
       videoId: { ownerId: -1, videoId: 2 },
@@ -938,17 +961,17 @@ describe("App", () => {
 
     const input = screen.getByLabelText("VK Video URL");
     await user.type(input, "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await openSubtitlesMenu(user);
-    await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Субтитры" }), "de_1_de.vtt");
 
     await user.clear(input);
     await user.type(input, "https://vkvideo.ru/video-3_4");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
 
     expect(await screen.findByText(/oid=-3&id=4/)).toBeInTheDocument();
     await openSubtitlesMenu(user);
-    expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
+    expect(screen.getByRole("combobox", { name: "Субтитры" })).toHaveValue("ru_0_ru.vtt");
 
     await act(async () => {
       resolveTrackLoad({
@@ -957,7 +980,7 @@ describe("App", () => {
       });
     });
 
-    expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
+    expect(screen.getByRole("combobox", { name: "Субтитры" })).toHaveValue("ru_0_ru.vtt");
     expect(screen.queryByRole("button", { name: "Hallo" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
   });
@@ -989,7 +1012,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Hallo" }));
 
@@ -1047,7 +1070,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "house" }));
 
@@ -1091,7 +1114,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "дом" }));
 
@@ -1124,7 +1147,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Hallo" }));
 
@@ -1152,7 +1175,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Hallo" }));
 
@@ -1176,11 +1199,11 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Hello" }));
 
-    expect(screen.getByLabelText("Word details: Hello")).toHaveTextContent("Hello");
+    expect(screen.getByLabelText("Слово: Hello")).toHaveTextContent("Hello");
     expect(mocks.invoke.mock.calls.some(([command]) => command === "lookup_word")).toBe(false);
   });
 
@@ -1217,7 +1240,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Hello" }));
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -1270,7 +1293,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await user.click(screen.getByRole("button", { name: "Hallo" }));
     await user.click(screen.getByRole("button", { name: "Welt" }));
@@ -1334,7 +1357,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await screen.findByText(/video_ext\.php/);
 
     act(() => {
@@ -1360,7 +1383,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.queryByText("Ищу в словаре...")).not.toBeInTheDocument();
     });
-    expect(screen.queryByLabelText("Word details: Hallo")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Слово: Hallo")).not.toBeInTheDocument();
 
     await act(async () => {
       resolveLookup(wordLookup({
@@ -1387,7 +1410,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await screen.findByText(/video_ext\.php/);
 
     act(() => {
@@ -1423,7 +1446,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await screen.findByText(/video_ext\.php/);
 
     act(() => {
@@ -1456,7 +1479,7 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await screen.findByText(/video_ext\.php/);
 
     act(() => {
@@ -1500,14 +1523,14 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await openSubtitlesMenu(user);
-    await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Субтитры" }), "de_1_de.vtt");
 
-    expect(await screen.findByText("This subtitle track is no longer available.")).toBeInTheDocument();
+    expect(await screen.findByText("Эта дорожка субтитров больше недоступна.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
+    expect(screen.getByRole("combobox", { name: "Субтитры" })).toHaveValue("ru_0_ru.vtt");
   });
 
   it("keeps previous subtitles visible when selected track cannot be parsed", async () => {
@@ -1534,14 +1557,14 @@ describe("App", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await user.click(await screen.findByRole("button", { name: "advance video" }));
     await openSubtitlesMenu(user);
-    await user.selectOptions(await screen.findByRole("combobox", { name: "Subtitles" }), "de_1_de.vtt");
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Субтитры" }), "de_1_de.vtt");
 
-    expect(await screen.findByText("Subtitles could not be parsed for this track.")).toBeInTheDocument();
+    expect(await screen.findByText("Не удалось разобрать субтитры этой дорожки.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Subtitles" })).toHaveValue("ru_0_ru.vtt");
+    expect(screen.getByRole("combobox", { name: "Субтитры" })).toHaveValue("ru_0_ru.vtt");
   });
 });
 
@@ -1642,7 +1665,7 @@ function setupInvoke(overrides: InvokeOverrides = {}) {
 async function loadAndPlay(timeMs = 2000) {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-  await user.click(screen.getByRole("button", { name: "Load" }));
+  await user.click(screen.getByRole("button", { name: /Загрузить/ }));
   await screen.findByTestId("video-player");
   act(() => {
     mocks.playerProps.current?.onTimeUpdate(timeMs);
@@ -1690,7 +1713,7 @@ describe("App second subtitle line", () => {
 
     await user.click(screen.getByRole("button", { name: "Hallo" }));
 
-    expect(screen.getByRole("dialog", { name: "Word details: Hallo" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Слово: Hallo" })).toBeInTheDocument();
   });
 
   it("aligns the reference line to the primary cue rather than raw playback time", async () => {
@@ -1825,7 +1848,7 @@ describe("App fullscreen", () => {
 
       const container = screen.getByTestId("player-container");
 
-      await user.click(screen.getByRole("button", { name: "Fullscreen" }));
+      await user.click(screen.getByRole("button", { name: "Полный экран" }));
       expect(requestFullscreen).toHaveBeenCalledTimes(1);
 
       Object.defineProperty(document, "fullscreenElement", {
@@ -1836,7 +1859,7 @@ describe("App fullscreen", () => {
         document.dispatchEvent(new Event("fullscreenchange"));
       });
 
-      await user.click(screen.getByRole("button", { name: "Exit fullscreen" }));
+      await user.click(screen.getByRole("button", { name: "Выйти из полноэкранного режима" }));
       expect(exitFullscreen).toHaveBeenCalledTimes(1);
     } finally {
       Element.prototype.requestFullscreen = originalRequest;
@@ -1874,7 +1897,7 @@ describe("App player chrome", () => {
     await loadAndPlay();
     readyControls();
 
-    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Воспроизвести" })).toBeInTheDocument();
     expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("true");
   });
 
@@ -1883,14 +1906,14 @@ describe("App player chrome", () => {
     const user = await loadAndPlay();
     readyControls();
 
-    await user.click(screen.getByRole("button", { name: "Play" }));
+    await user.click(screen.getByRole("button", { name: "Воспроизвести" }));
     expect(mocks.playPlayer).toHaveBeenCalledTimes(1);
 
     act(() => {
       mocks.playerProps.current?.onPlayingChange?.(true);
     });
 
-    await user.click(screen.getByRole("button", { name: "Pause" }));
+    await user.click(screen.getByRole("button", { name: "Пауза" }));
     expect(mocks.pausePlayer).toHaveBeenCalledTimes(1);
   });
 
@@ -1899,13 +1922,13 @@ describe("App player chrome", () => {
     const user = await loadAndPlay();
     readyControls();
 
-    await user.click(screen.getByRole("button", { name: "VK controls (speed, quality)" }));
+    await user.click(screen.getByRole("button", { name: "Настройки VK (скорость, качество)" }));
 
-    expect(screen.queryByRole("button", { name: "Play" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Воспроизвести" })).not.toBeInTheDocument();
     expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("false");
 
-    await user.click(screen.getByRole("button", { name: "Back to clean controls" }));
-    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Вернуться к своим контролам" }));
+    expect(screen.getByRole("button", { name: "Воспроизвести" })).toBeInTheDocument();
     expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("true");
   });
 
@@ -1917,13 +1940,13 @@ describe("App player chrome", () => {
     act(() => {
       mocks.playerProps.current?.onAdChange?.(true);
     });
-    expect(screen.queryByRole("button", { name: "Play" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Воспроизвести" })).not.toBeInTheDocument();
     expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("false");
 
     act(() => {
       mocks.playerProps.current?.onAdChange?.(false);
     });
-    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Воспроизвести" })).toBeInTheDocument();
     expect(screen.getByTestId("video-player").getAttribute("data-block-input")).toBe("true");
   });
 
@@ -2040,10 +2063,10 @@ describe("App recent videos", () => {
     render(<App />);
 
     await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await screen.findByText(/video_ext\.php/);
 
-    await user.click(screen.getByRole("button", { name: "← К списку" }));
+    await user.click(screen.getByRole("button", { name: "← Назад" }));
 
     expect(await screen.findByRole("button", { name: "Deutsch lernen" })).toBeInTheDocument();
     expect(screen.queryByText(/video_ext\.php/)).not.toBeInTheDocument();

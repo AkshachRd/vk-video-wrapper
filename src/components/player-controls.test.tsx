@@ -27,7 +27,7 @@ describe("PlayerControls", () => {
     const user = userEvent.setup();
     const props = setup({ isPlaying: false });
 
-    await user.click(screen.getByRole("button", { name: "Play" }));
+    await user.click(screen.getByRole("button", { name: "Воспроизвести" }));
 
     expect(props.onPlayPause).toHaveBeenCalledTimes(1);
   });
@@ -35,7 +35,7 @@ describe("PlayerControls", () => {
   it("shows a pause affordance when playing", () => {
     setup({ isPlaying: true });
 
-    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Пауза" })).toBeInTheDocument();
   });
 
   it("renders elapsed and total time as H:MM:SS / M:SS", () => {
@@ -47,7 +47,7 @@ describe("PlayerControls", () => {
   it("seeks via the progress slider", () => {
     const props = setup({ durationMs: 100000 });
 
-    fireEvent.change(screen.getByRole("slider", { name: "Seek" }), {
+    fireEvent.change(screen.getByRole("slider", { name: "Перемотка" }), {
       target: { value: "50000" },
     });
 
@@ -58,8 +58,8 @@ describe("PlayerControls", () => {
     const user = userEvent.setup();
     const props = setup({ muted: true });
 
-    expect(screen.getByRole("button", { name: "Unmute" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Unmute" }));
+    expect(screen.getByRole("button", { name: "Включить звук" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Включить звук" }));
 
     expect(props.onToggleMute).toHaveBeenCalledTimes(1);
   });

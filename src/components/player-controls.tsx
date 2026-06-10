@@ -32,7 +32,7 @@ export function PlayerControls({
     <div className="pointer-events-auto flex items-center gap-3 rounded-md bg-black/70 px-3 py-2 text-white">
       <button
         type="button"
-        aria-label={isPlaying ? "Pause" : "Play"}
+        aria-label={isPlaying ? "Пауза" : "Воспроизвести"}
         onClick={onPlayPause}
         className="rounded p-1 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
       >
@@ -45,7 +45,7 @@ export function PlayerControls({
 
       <input
         type="range"
-        aria-label="Seek"
+        aria-label="Перемотка"
         min={0}
         max={Math.max(durationMs, 0)}
         value={clampedTime}
@@ -55,7 +55,7 @@ export function PlayerControls({
 
       <button
         type="button"
-        aria-label={muted ? "Unmute" : "Mute"}
+        aria-label={muted ? "Включить звук" : "Выключить звук"}
         onClick={onToggleMute}
         className="rounded p-1 hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
       >
@@ -64,7 +64,7 @@ export function PlayerControls({
 
       <input
         type="range"
-        aria-label="Volume"
+        aria-label="Громкость"
         min={0}
         max={1}
         step={0.05}
