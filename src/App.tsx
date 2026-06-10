@@ -811,7 +811,7 @@ export default function App() {
             <button
               type="submit"
               disabled={isLoading}
-              className="group/snake relative flex h-11 items-center gap-[9px] rounded-full bg-ink px-6 text-sm font-medium tracking-[0.01em] whitespace-nowrap text-paper transition-transform duration-400 ease-spring active:scale-[0.97] disabled:cursor-progress disabled:opacity-45"
+              className="group/snake relative flex h-11 items-center gap-[9px] rounded-full bg-ink px-6 text-sm font-medium tracking-[0.01em] whitespace-nowrap text-paper [transition:opacity_0.2s,scale_0.4s_var(--ease-spring)] active:scale-[0.97] disabled:cursor-progress disabled:opacity-45"
             >
               {isLoading ? "Загрузка" : "Загрузить"}
               <span
@@ -848,23 +848,35 @@ export default function App() {
           ) : null}
 
           {video && lane ? (
-            <>
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="mb-3 text-sm text-slate-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-              >
-                ← Назад
-              </button>
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-              <div className="space-y-3">
+            <div className="px-9 pt-[18px]">
+              <div className="mb-4 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="group/snake relative flex items-center gap-[9px] rounded-full border-[1.5px] border-line-2 bg-paper px-4 py-2 text-[13px] font-medium text-ink transition-colors duration-200 hover:border-ink"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="inline-block transition-transform duration-[450ms] ease-spring group-hover/snake:-translate-x-1"
+                  >
+                    ←
+                  </span>
+                  Назад
+                  <SnakeBorder shape="pill" />
+                </button>
+                {video.title ? (
+                  <span className="ml-auto min-w-0 truncate text-[13px] font-medium text-ink-2">{video.title}</span>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-[minmax(0,1fr)_280px] items-start gap-[18px]">
                 <div
                   ref={setPlayerContainer}
                   data-testid="player-container"
                   onPointerMove={revealControls}
                   className={cn(
-                    "relative aspect-video overflow-hidden bg-black",
-                    isFullscreen ? "" : "rounded-md border border-slate-800",
+                    "relative aspect-video overflow-hidden bg-well",
+                    isFullscreen ? "" : "rounded-card-lg",
                     !controlsVisible && "cursor-none",
                   )}
                 >
@@ -894,8 +906,21 @@ export default function App() {
                     />
                   ) : null}
 
+                  {isPlaying && showCustomUi ? (
+                    <div
+                      data-testid="playing-indicator"
+                      className={cn(
+                        "absolute top-[15px] left-4 z-[6] flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] text-white/75 transition-opacity duration-300",
+                        controlsVisible ? "opacity-100" : "opacity-0",
+                      )}
+                    >
+                      <span className="h-[7px] w-[7px] animate-pulse-dot rounded-full bg-white motion-reduce:animate-none" />
+                      ВОСПРОИЗВЕДЕНИЕ
+                    </div>
+                  ) : null}
+
                   {showCustomUi ? (
-                    <div className="pointer-events-none absolute inset-x-0 bottom-16 flex flex-col items-center gap-1 px-8">
+                    <div className="pointer-events-none absolute inset-x-0 bottom-[76px] z-[5] flex flex-col items-center gap-[9px] px-[26px]">
                       <SubtitleOverlay
                         lane={lane}
                         timeMs={effectiveTimeMs}
@@ -906,10 +931,7 @@ export default function App() {
                         popoverContainer={isFullscreen ? playerContainer : undefined}
                       />
                       {secondaryLane ? (
-                        <div
-                          data-testid="secondary-subtitle-slot"
-                          className="flex min-h-10 justify-center"
-                        >
+                        <div data-testid="secondary-subtitle-slot" className="flex min-h-10 justify-center">
                           <SubtitleReferenceLine lane={secondaryLane} primaryCue={primaryCue} />
                         </div>
                       ) : null}
@@ -920,8 +942,8 @@ export default function App() {
                     <div
                       data-testid="player-control-bar"
                       className={cn(
-                        "absolute inset-x-0 bottom-0 p-2 transition-opacity duration-300",
-                        controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none",
+                        "absolute inset-x-3.5 bottom-3.5 z-[7] [transition:transform_0.35s_var(--ease-soft),opacity_0.3s_var(--ease-soft)]",
+                        controlsVisible ? "opacity-100" : "pointer-events-none translate-y-[140%] opacity-0",
                       )}
                     >
                       <PlayerControls
@@ -943,8 +965,8 @@ export default function App() {
                     <div
                       data-testid="player-corner-controls"
                       className={cn(
-                        "absolute right-2 top-2 flex gap-2 transition-opacity duration-300",
-                        controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none",
+                        "absolute top-3.5 right-3.5 z-[7] flex gap-2 transition-opacity duration-300",
+                        controlsVisible ? "opacity-100" : "pointer-events-none opacity-0",
                       )}
                     >
                       <button
@@ -960,43 +982,45 @@ export default function App() {
                             ? "Вернуться к своим контролам"
                             : "Настройки VK (скорость, качество)"
                         }
-                        className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                        className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
                       >
                         {playerMode === "vk" ? (
-                          <X className="h-5 w-5" aria-hidden="true" />
+                          <X className="h-[18px] w-[18px]" aria-hidden="true" />
                         ) : (
-                          <Settings className="h-5 w-5" aria-hidden="true" />
+                          <Settings className="h-[18px] w-[18px]" aria-hidden="true" />
                         )}
+                        <SnakeBorder shape="circle" />
                       </button>
                       <button
                         type="button"
                         onClick={toggleFullscreen}
                         aria-label={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
                         title={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
-                        className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                        className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
                       >
                         {isFullscreen ? (
-                          <Minimize2 className="h-5 w-5" aria-hidden="true" />
+                          <Minimize2 className="h-[18px] w-[18px]" aria-hidden="true" />
                         ) : (
-                          <Maximize2 className="h-5 w-5" aria-hidden="true" />
+                          <Maximize2 className="h-[18px] w-[18px]" aria-hidden="true" />
                         )}
+                        <SnakeBorder shape="circle" />
                       </button>
                     </div>
                   ) : null}
                 </div>
+
+                <SavedWordsPanel
+                  words={savedWords}
+                  isLoading={areSavedWordsLoading}
+                  isUnavailable={savedWordsUnavailable}
+                  pendingWordIds={savedWords
+                    .filter((word) => pendingSavedWordActions[savedWordKey(word.language, word.normalizedWord)] === "removing")
+                    .map((word) => word.id)}
+                  error={savedWordsPanelError}
+                  onRemove={handleRemoveSavedWord}
+                />
               </div>
-              <SavedWordsPanel
-                words={savedWords}
-                isLoading={areSavedWordsLoading}
-                isUnavailable={savedWordsUnavailable}
-                pendingWordIds={savedWords
-                  .filter((word) => pendingSavedWordActions[savedWordKey(word.language, word.normalizedWord)] === "removing")
-                  .map((word) => word.id)}
-                error={savedWordsPanelError}
-                onRemove={handleRemoveSavedWord}
-              />
-              </div>
-            </>
+            </div>
           ) : null}
         </div>
       </div>

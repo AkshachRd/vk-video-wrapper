@@ -849,6 +849,24 @@ describe("App", () => {
     expect(await screen.findByText(/video_ext\.php/)).toBeInTheDocument();
   });
 
+  it("shows the wave loading bar while a video is loading", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      return new Promise(() => {});
+    });
+
+    render(<App />);
+
+    expect(screen.queryByTestId("load-wave")).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
+
+    expect(screen.getByTestId("load-wave")).toBeInTheDocument();
+  });
+
   it("shows a subtitle track dropdown with readable labels after loading", async () => {
     const user = userEvent.setup();
     mocks.invoke.mockImplementation((command: string) => {
@@ -1958,6 +1976,19 @@ describe("App player chrome", () => {
     expect(screen.getByTestId("player-corner-controls").className).toContain("opacity-100");
   });
 
+  it("shows the playing indicator only while playing and chrome is visible", async () => {
+    render(<App />);
+    await loadAndPlay();
+
+    expect(screen.queryByTestId("playing-indicator")).not.toBeInTheDocument();
+
+    act(() => {
+      mocks.playerProps.current?.onPlayingChange?.(true);
+    });
+
+    expect(screen.getByTestId("playing-indicator").className).toContain("opacity-100");
+  });
+
   it("toggles play/pause when clicking the video surface", async () => {
     render(<App />);
     const user = await loadAndPlay();
@@ -2066,7 +2097,7 @@ describe("App recent videos", () => {
     await user.click(screen.getByRole("button", { name: /Загрузить/ }));
     await screen.findByText(/video_ext\.php/);
 
-    await user.click(screen.getByRole("button", { name: "← Назад" }));
+    await user.click(screen.getByRole("button", { name: "Назад" }));
 
     expect(await screen.findByRole("button", { name: "Deutsch lernen" })).toBeInTheDocument();
     expect(screen.queryByText(/video_ext\.php/)).not.toBeInTheDocument();
