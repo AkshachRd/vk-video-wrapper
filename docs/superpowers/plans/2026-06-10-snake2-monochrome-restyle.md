@@ -1179,7 +1179,7 @@ Expected: FAIL — `Unable to find an element by: [data-testid="playing-indicato
                   ? "Вернуться к своим контролам"
                   : "Настройки VK (скорость, качество)"
               }
-              className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
+              className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/94 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
             >
               {playerMode === "vk" ? (
                 <X className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -1193,7 +1193,7 @@ Expected: FAIL — `Unable to find an element by: [data-testid="playing-indicato
               onClick={toggleFullscreen}
               aria-label={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
               title={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
-              className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
+              className="group/snake relative flex h-9 w-9 items-center justify-center rounded-full bg-white/94 text-ink [transition:background-color_0.18s_var(--ease-soft),color_0.18s,scale_0.3s_var(--ease-spring)] hover:bg-ink hover:text-paper active:scale-90"
             >
               {isFullscreen ? (
                 <Minimize2 className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -1345,7 +1345,7 @@ export function PlayerControls({
   const volumeValue = muted ? 0 : volume;
 
   return (
-    <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-white/95 px-3 py-[7px] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.4)]">
+    <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-white/96 px-3 py-[7px] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.4)]">
       <button
         type="button"
         aria-label={isPlaying ? "Пауза" : "Воспроизвести"}
