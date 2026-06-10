@@ -942,7 +942,7 @@ export default function App() {
                     <div
                       data-testid="player-control-bar"
                       className={cn(
-                        "absolute inset-x-3.5 bottom-3.5 z-[7] [transition:transform_0.35s_var(--ease-soft),opacity_0.3s_var(--ease-soft)]",
+                        "absolute inset-x-3.5 bottom-3.5 z-[7] [transition:translate_0.35s_var(--ease-soft),opacity_0.3s_var(--ease-soft)]",
                         controlsVisible ? "opacity-100" : "pointer-events-none translate-y-[140%] opacity-0",
                       )}
                     >
