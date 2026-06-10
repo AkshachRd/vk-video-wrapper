@@ -949,7 +949,7 @@ export function RecentVideosList({
                     type="button"
                     onClick={() => onRemove(video)}
                     aria-label={`Удалить из истории: ${title}`}
-                    className="absolute top-2.5 right-2.5 z-[2] flex h-[26px] w-[26px] scale-[0.8] items-center justify-center rounded-full bg-white/90 text-ink opacity-0 [transition:opacity_0.2s,scale_0.3s_var(--ease-spring),background-color_0.15s,color_0.15s] group-hover/card:scale-100 group-hover/card:opacity-100 hover:bg-ink hover:text-paper focus-visible:scale-100 focus-visible:opacity-100"
+                    className="absolute top-2.5 right-2.5 z-[2] flex h-[26px] w-[26px] scale-[0.8] items-center justify-center rounded-full bg-white/92 text-ink opacity-0 [transition:opacity_0.2s,scale_0.3s_var(--ease-spring),background-color_0.15s,color_0.15s] group-hover/card:scale-100 group-hover/card:opacity-100 hover:bg-ink hover:text-paper focus-visible:scale-100 focus-visible:opacity-100"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
