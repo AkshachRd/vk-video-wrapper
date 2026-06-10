@@ -2,9 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEv
 import { invoke } from "@tauri-apps/api/core";
 import { Captions, Maximize2, Minimize2, Settings, X } from "lucide-react";
 
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SnakeBorder } from "@/components/snake-border";
+import { Wave } from "@/components/wave";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RecentVideosList } from "@/components/recent-videos-list";
 import { SavedWordsPanel } from "@/components/saved-words-panel";
@@ -789,186 +788,218 @@ export default function App() {
     ) : null;
 
   return (
-    <main className="min-h-screen bg-slate-950 p-6 text-slate-100">
-      <form className="mx-auto flex max-w-7xl gap-2" onSubmit={handleSubmit}>
-        <Input
-          aria-label="VK Video URL"
-          placeholder="вставь ссылку vkvideo.ru/video…"
-          value={url}
-          disabled={isLoading}
-          onChange={(event) => setUrl(event.target.value)}
-        />
-        <Button type="submit" disabled={isLoading}>
-          {isLoading ? "Загрузка" : "Загрузить"}
-        </Button>
-      </form>
+    <main className="flex min-h-screen p-8">
+      <div className="m-auto flex w-full max-w-[1140px] flex-col overflow-hidden rounded-card-lg bg-paper shadow-[0_1px_0_rgba(0,0,0,0.04),0_40px_90px_-40px_rgba(0,0,0,0.32)]">
+        <div className="relative min-h-[640px] pb-[34px]">
+          {/* мастхед: в этой версии дизайна — только волна */}
+          <header className="px-9 pt-[34px] pb-2">
+            <Wave className="mt-[18px] h-[18px]" />
+          </header>
 
-      <section className="mx-auto mt-6 max-w-7xl">
-        {error ? <Alert>{error}</Alert> : null}
-
-        {!video || !lane ? (
-          <RecentVideosList
-            videos={recentVideos}
-            isLoading={areRecentVideosLoading}
-            isUnavailable={recentVideosUnavailable}
-            error={recentVideosError}
-            onSelect={handleSelectRecentVideo}
-            onRemove={handleRemoveRecentVideo}
-          />
-        ) : null}
-
-        {video && lane ? (
-          <>
-            <button
-              type="button"
-              onClick={handleBackToList}
-              className="mb-3 text-sm text-slate-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-            >
-              ← Назад
-            </button>
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-            <div className="space-y-3">
-              <div
-                ref={setPlayerContainer}
-                data-testid="player-container"
-                onPointerMove={revealControls}
-                className={cn(
-                  "relative aspect-video overflow-hidden bg-black",
-                  isFullscreen ? "" : "rounded-md border border-slate-800",
-                  !controlsVisible && "cursor-none",
-                )}
-              >
-                <VideoPlayer
-                  embedUrl={video.embedUrl}
-                  onTimeUpdate={handleTimeUpdate}
-                  onDurationChange={handleDurationChange}
-                  onPlayingChange={handlePlayingChange}
-                  onVolumeChange={handleVolumeChange}
-                  onAdChange={handleAdChange}
-                  onPlaybackStart={handlePlaybackStart}
-                  onControlsReady={handlePlayerControlsReady}
-                  blockInput={blockInput}
-                />
-
-                {showCustomUi ? (
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    aria-label="Воспроизведение или пауза"
-                    data-testid="player-click-surface"
-                    onClick={handlePlayPause}
-                    className={cn(
-                      "absolute inset-0 h-full w-full bg-transparent",
-                      controlsVisible ? "cursor-pointer" : "cursor-none",
-                    )}
-                  />
-                ) : null}
-
-                {showCustomUi ? (
-                  <div className="pointer-events-none absolute inset-x-0 bottom-16 flex flex-col items-center gap-1 px-8">
-                    <SubtitleOverlay
-                      lane={lane}
-                      timeMs={effectiveTimeMs}
-                      wordLookup={wordLookup}
-                      onWordInspect={handleSubtitleWordInspect}
-                      onWordInspectEnd={handleSubtitleWordInspectEnd}
-                      getWordSaveControl={getWordSaveControl}
-                      popoverContainer={isFullscreen ? playerContainer : undefined}
-                    />
-                    {secondaryLane ? (
-                      <div
-                        data-testid="secondary-subtitle-slot"
-                        className="flex min-h-10 justify-center"
-                      >
-                        <SubtitleReferenceLine lane={secondaryLane} primaryCue={primaryCue} />
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {showCustomUi ? (
-                  <div
-                    data-testid="player-control-bar"
-                    className={cn(
-                      "absolute inset-x-0 bottom-0 p-2 transition-opacity duration-300",
-                      controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none",
-                    )}
-                  >
-                    <PlayerControls
-                      isPlaying={isPlaying}
-                      currentTimeMs={currentTimeMs}
-                      durationMs={durationMs}
-                      volume={volume}
-                      muted={muted}
-                      onPlayPause={handlePlayPause}
-                      onSeek={handleSeek}
-                      onSetVolume={handleSetVolume}
-                      onToggleMute={handleToggleMute}
-                      trailing={subtitlesMenu}
-                    />
-                  </div>
-                ) : null}
-
-                {!isAd ? (
-                  <div
-                    data-testid="player-corner-controls"
-                    className={cn(
-                      "absolute right-2 top-2 flex gap-2 transition-opacity duration-300",
-                      controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={toggleVkMode}
-                      aria-label={
-                        playerMode === "vk"
-                          ? "Вернуться к своим контролам"
-                          : "Настройки VK (скорость, качество)"
-                      }
-                      title={
-                        playerMode === "vk"
-                          ? "Вернуться к своим контролам"
-                          : "Настройки VK (скорость, качество)"
-                      }
-                      className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-                    >
-                      {playerMode === "vk" ? (
-                        <X className="h-5 w-5" aria-hidden="true" />
-                      ) : (
-                        <Settings className="h-5 w-5" aria-hidden="true" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={toggleFullscreen}
-                      aria-label={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
-                      title={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
-                      className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-                    >
-                      {isFullscreen ? (
-                        <Minimize2 className="h-5 w-5" aria-hidden="true" />
-                      ) : (
-                        <Maximize2 className="h-5 w-5" aria-hidden="true" />
-                      )}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <SavedWordsPanel
-              words={savedWords}
-              isLoading={areSavedWordsLoading}
-              isUnavailable={savedWordsUnavailable}
-              pendingWordIds={savedWords
-                .filter((word) => pendingSavedWordActions[savedWordKey(word.language, word.normalizedWord)] === "removing")
-                .map((word) => word.id)}
-              error={savedWordsPanelError}
-              onRemove={handleRemoveSavedWord}
+          <form
+            className="mx-9 mt-[22px] flex items-center gap-2 rounded-full border-[1.5px] border-line-2 bg-paper py-1.5 pr-1.5 pl-[22px] [transition:border-color_0.2s_var(--ease-soft),box-shadow_0.2s_var(--ease-soft)] focus-within:border-ink focus-within:shadow-[0_0_0_4px_rgba(12,12,12,0.05)]"
+            onSubmit={handleSubmit}
+          >
+            <input
+              aria-label="VK Video URL"
+              placeholder="вставь ссылку vkvideo.ru/video…"
+              value={url}
+              disabled={isLoading}
+              onChange={(event) => setUrl(event.target.value)}
+              className="min-w-0 flex-1 border-0 bg-transparent py-2.5 text-[15px] tracking-[-0.01em] text-ink outline-none placeholder:text-ink-3"
             />
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="group/snake relative flex h-11 items-center gap-[9px] rounded-full bg-ink px-6 text-sm font-medium tracking-[0.01em] whitespace-nowrap text-paper transition-transform duration-400 ease-spring active:scale-[0.97] disabled:cursor-progress disabled:opacity-45"
+            >
+              {isLoading ? "Загрузка" : "Загрузить"}
+              <span
+                aria-hidden="true"
+                className="inline-block transition-transform duration-500 ease-spring group-hover/snake:translate-x-[5px]"
+              >
+                →
+              </span>
+              <SnakeBorder shape="pill" />
+            </button>
+          </form>
+
+          {isLoading ? (
+            <div data-testid="load-wave" className="mx-9 mt-4 h-3.5 overflow-hidden">
+              <div className="h-full w-full animate-flow bg-(image:--wave-load) bg-position-[0px_50%] bg-size-[44px_10px] bg-repeat-x motion-reduce:animate-none" />
             </div>
-          </>
-        ) : null}
-      </section>
+          ) : null}
+
+          {error ? (
+            <div role="alert" className="mx-9 mt-4 rounded-card bg-paper-2 px-5 py-3 text-sm text-ink-2">
+              {error}
+            </div>
+          ) : null}
+
+          {!video || !lane ? (
+            <RecentVideosList
+              videos={recentVideos}
+              isLoading={areRecentVideosLoading}
+              isUnavailable={recentVideosUnavailable}
+              error={recentVideosError}
+              onSelect={handleSelectRecentVideo}
+              onRemove={handleRemoveRecentVideo}
+            />
+          ) : null}
+
+          {video && lane ? (
+            <>
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="mb-3 text-sm text-slate-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+              >
+                ← Назад
+              </button>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+              <div className="space-y-3">
+                <div
+                  ref={setPlayerContainer}
+                  data-testid="player-container"
+                  onPointerMove={revealControls}
+                  className={cn(
+                    "relative aspect-video overflow-hidden bg-black",
+                    isFullscreen ? "" : "rounded-md border border-slate-800",
+                    !controlsVisible && "cursor-none",
+                  )}
+                >
+                  <VideoPlayer
+                    embedUrl={video.embedUrl}
+                    onTimeUpdate={handleTimeUpdate}
+                    onDurationChange={handleDurationChange}
+                    onPlayingChange={handlePlayingChange}
+                    onVolumeChange={handleVolumeChange}
+                    onAdChange={handleAdChange}
+                    onPlaybackStart={handlePlaybackStart}
+                    onControlsReady={handlePlayerControlsReady}
+                    blockInput={blockInput}
+                  />
+
+                  {showCustomUi ? (
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      aria-label="Воспроизведение или пауза"
+                      data-testid="player-click-surface"
+                      onClick={handlePlayPause}
+                      className={cn(
+                        "absolute inset-0 h-full w-full bg-transparent",
+                        controlsVisible ? "cursor-pointer" : "cursor-none",
+                      )}
+                    />
+                  ) : null}
+
+                  {showCustomUi ? (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-16 flex flex-col items-center gap-1 px-8">
+                      <SubtitleOverlay
+                        lane={lane}
+                        timeMs={effectiveTimeMs}
+                        wordLookup={wordLookup}
+                        onWordInspect={handleSubtitleWordInspect}
+                        onWordInspectEnd={handleSubtitleWordInspectEnd}
+                        getWordSaveControl={getWordSaveControl}
+                        popoverContainer={isFullscreen ? playerContainer : undefined}
+                      />
+                      {secondaryLane ? (
+                        <div
+                          data-testid="secondary-subtitle-slot"
+                          className="flex min-h-10 justify-center"
+                        >
+                          <SubtitleReferenceLine lane={secondaryLane} primaryCue={primaryCue} />
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {showCustomUi ? (
+                    <div
+                      data-testid="player-control-bar"
+                      className={cn(
+                        "absolute inset-x-0 bottom-0 p-2 transition-opacity duration-300",
+                        controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none",
+                      )}
+                    >
+                      <PlayerControls
+                        isPlaying={isPlaying}
+                        currentTimeMs={currentTimeMs}
+                        durationMs={durationMs}
+                        volume={volume}
+                        muted={muted}
+                        onPlayPause={handlePlayPause}
+                        onSeek={handleSeek}
+                        onSetVolume={handleSetVolume}
+                        onToggleMute={handleToggleMute}
+                        trailing={subtitlesMenu}
+                      />
+                    </div>
+                  ) : null}
+
+                  {!isAd ? (
+                    <div
+                      data-testid="player-corner-controls"
+                      className={cn(
+                        "absolute right-2 top-2 flex gap-2 transition-opacity duration-300",
+                        controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={toggleVkMode}
+                        aria-label={
+                          playerMode === "vk"
+                            ? "Вернуться к своим контролам"
+                            : "Настройки VK (скорость, качество)"
+                        }
+                        title={
+                          playerMode === "vk"
+                            ? "Вернуться к своим контролам"
+                            : "Настройки VK (скорость, качество)"
+                        }
+                        className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                      >
+                        {playerMode === "vk" ? (
+                          <X className="h-5 w-5" aria-hidden="true" />
+                        ) : (
+                          <Settings className="h-5 w-5" aria-hidden="true" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleFullscreen}
+                        aria-label={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
+                        title={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
+                        className="rounded-md bg-black/60 p-2 text-white/90 transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                      >
+                        {isFullscreen ? (
+                          <Minimize2 className="h-5 w-5" aria-hidden="true" />
+                        ) : (
+                          <Maximize2 className="h-5 w-5" aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              <SavedWordsPanel
+                words={savedWords}
+                isLoading={areSavedWordsLoading}
+                isUnavailable={savedWordsUnavailable}
+                pendingWordIds={savedWords
+                  .filter((word) => pendingSavedWordActions[savedWordKey(word.language, word.normalizedWord)] === "removing")
+                  .map((word) => word.id)}
+                error={savedWordsPanelError}
+                onRemove={handleRemoveSavedWord}
+              />
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
     </main>
   );
 }
