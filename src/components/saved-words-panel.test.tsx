@@ -53,4 +53,16 @@ describe("SavedWordsPanel", () => {
 
     expect(onRemove).toHaveBeenCalledWith(savedWord());
   });
+
+  it("marks the freshly saved word for the flash highlight", () => {
+    render(<SavedWordsPanel words={[savedWord()]} freshWordId="de:welt" onRemove={vi.fn()} />);
+
+    expect(screen.getByText("Welt").closest("[data-fresh='true']")).not.toBeNull();
+  });
+
+  it("does not mark stale words as fresh", () => {
+    render(<SavedWordsPanel words={[savedWord()]} onRemove={vi.fn()} />);
+
+    expect(screen.getByText("Welt").closest("[data-fresh='true']")).toBeNull();
+  });
 });

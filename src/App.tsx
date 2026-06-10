@@ -85,6 +85,8 @@ export default function App() {
   const [pendingSavedWordActions, setPendingSavedWordActions] = useState<Record<string, PendingSavedWordAction>>({});
   const [saveWordErrorKey, setSaveWordErrorKey] = useState<string | undefined>();
   const [savedWordsPanelError, setSavedWordsPanelError] = useState<string | undefined>();
+  const [freshSavedWordId, setFreshSavedWordId] = useState<string | undefined>();
+  const freshSavedWordTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [recentVideos, setRecentVideos] = useState<RecentVideo[]>([]);
   const [areRecentVideosLoading, setAreRecentVideosLoading] = useState(true);
   const [recentVideosUnavailable, setRecentVideosUnavailable] = useState(false);
@@ -151,6 +153,13 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(
+    () => () => {
+      if (freshSavedWordTimerRef.current) clearTimeout(freshSavedWordTimerRef.current);
+    },
+    [],
+  );
 
   const resetWordLookup = useCallback(() => {
     lookupRequestIdRef.current += 1;
@@ -261,6 +270,9 @@ export default function App() {
         removedSavedWordIdsRef.current.delete(savedWord.id);
         removedSavedWordKeysRef.current.delete(savedWordKey(savedWord.language, savedWord.normalizedWord));
         setSavedWords((words) => replaceSavedWord(words, savedWord));
+        setFreshSavedWordId(savedWord.id);
+        if (freshSavedWordTimerRef.current) clearTimeout(freshSavedWordTimerRef.current);
+        freshSavedWordTimerRef.current = setTimeout(() => setFreshSavedWordId(undefined), 700);
       } catch {
         setSaveWordErrorKey(key);
       } finally {
@@ -1028,6 +1040,7 @@ export default function App() {
                   pendingWordIds={savedWords
                     .filter((word) => pendingSavedWordActions[savedWordKey(word.language, word.normalizedWord)] === "removing")
                     .map((word) => word.id)}
+                  freshWordId={freshSavedWordId}
                   error={savedWordsPanelError}
                   onRemove={handleRemoveSavedWord}
                 />
