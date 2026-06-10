@@ -1,0 +1,24 @@
+/* ============================================================
+   stitch.css — "Змейка 2": a dense closed wavy ring that circles
+   OUTSIDE the element in a clear band, never overlapping it.
+   Loaded AFTER snake.css (overrides the single-serpent look).
+   ============================================================ */
+
+/* full continuous ring instead of one traveling segment */
+.stitch .snake-path {
+  stroke-dasharray: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* float the ring further out so it sits in a band around the element */
+.stitch .snake-svg                  { --snake-gap: 14px; }
+.stitch .snake-svg[data-shape="round"]  { --snake-gap: 16px; }
+.stitch .snake-svg[data-shape="circle"] { --snake-gap: 12px; }
+
+/* the ring is always whole, so reveal can ease in a touch of rotation feel */
+.stitch.snakes .snake-host:hover > .snake-svg,
+.stitch.snakes .snake-host:focus-within > .snake-svg {
+  opacity: 1;
+  transform: scale(1) rotate(0.001deg);
+}

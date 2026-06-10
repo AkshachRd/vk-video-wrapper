@@ -1,0 +1,64 @@
+/* ============================================================
+   snake.css — bold serpentine outline overlay
+   Loaded AFTER mono.css. A hidden bold wavy line that, on hover,
+   detaches outside the element and slithers around its perimeter.
+   The wavy geometry is generated in JS (SnakeBorder); this file
+   styles + reveals + crawls it.
+   ============================================================ */
+
+:root {
+  --snake-sw: 3px;       /* boldness (tweakable) */
+  --snake-dur: 1.5s;     /* crawl lap time (tweakable) */
+  --snake-amp: 4px;      /* wave amplitude / wiggle (tweakable) */
+  --snake-gap: 7px;      /* how far the body floats off the edge */
+}
+
+.snake-host { position: relative; transition: transform 0.4s var(--spring); }
+
+/* floating layer — JS sets width/height/viewBox; CSS only positions + reveals */
+.snake-svg {
+  position: absolute;
+  left: calc(-1 * var(--snake-gap));
+  top: calc(-1 * var(--snake-gap));
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.2s var(--ease), transform 0.4s var(--spring);
+  z-index: 6;
+}
+.snake-svg[data-shape="round"]  { --snake-gap: 9px; }
+.snake-svg[data-shape="circle"] { --snake-gap: 6px; }
+
+.snake-path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: var(--snake-sw);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 40 60;   /* one long serpent (pathLength=100) */
+  stroke-dashoffset: 0;
+  vector-effect: non-scaling-stroke;
+}
+
+/* reveal + crawl — only when snakes enabled and host hovered/focused */
+.snakes .snake-host:hover > .snake-svg,
+.snakes .snake-host:focus-visible > .snake-svg,
+.snakes .snake-host:focus-within > .snake-svg {
+  opacity: 1;
+  transform: scale(1);
+}
+.snakes .snake-host:hover > .snake-svg .snake-path,
+.snakes .snake-host:focus-within > .snake-svg .snake-path {
+  animation: snakecrawl var(--snake-dur) linear infinite;
+}
+@keyframes snakecrawl { to { stroke-dashoffset: -100; } }
+
+/* let the serpent escape its host */
+.urlbar { overflow: visible; }
+.btn-load.snake-host { overflow: visible; }
+.rcard.snake-host { overflow: visible; }
+.rcard.snake-host .rthumb { border-radius: var(--radius); }
+.btn-save.snake-host { overflow: visible; }
+
+.snake-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
