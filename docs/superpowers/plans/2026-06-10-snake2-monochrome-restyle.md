@@ -194,7 +194,9 @@ export function Wave({ className }: { className?: string }) {
     to { background-position-x: 11px; }
   }
   @keyframes chkin {
-    to { transform: rotate(-45deg) scale(1); }
+    /* база галочки — индивидуальные свойства rotate/scale (v4-утилиты),
+       поэтому анимируем индивидуальный scale, а не transform */
+    to { scale: 1; }
   }
 }
 
@@ -1734,7 +1736,7 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function StatusNote({ children }: { children: ReactNode }) {
-  return <div className="px-[18px] pb-3.5 text-sm text-ink-2">{children}</div>;
+  return <div className="px-[18px] pt-1 pb-3.5 text-sm text-ink-2">{children}</div>;
 }
 
 function SavedWordButton({ control }: { control?: WordSaveControl }) {
@@ -1758,10 +1760,10 @@ function SavedWordButton({ control }: { control?: WordSaveControl }) {
         }
         onClick={control.onToggle}
         className={cn(
-          "group/snake relative flex w-full items-center justify-center gap-[9px] rounded-full p-3 text-[13px] font-medium tracking-[0.01em] [transition:translate_0.3s_var(--ease-spring),background-color_0.2s,color_0.2s] disabled:opacity-60",
+          "group/snake relative flex w-full items-center justify-center gap-[9px] rounded-full p-3 text-[13px] font-medium tracking-[0.01em] [transition:translate_0.3s_var(--ease-spring),background-color_0.2s,color_0.2s] hover:-translate-y-px disabled:opacity-60",
           isSavedLook
             ? "bg-paper-2 text-ink shadow-[inset_0_0_0_1.5px_var(--color-line-2)]"
-            : "bg-ink text-paper hover:-translate-y-px",
+            : "bg-ink text-paper",
         )}
       >
         {control.status === "saved" ? (
