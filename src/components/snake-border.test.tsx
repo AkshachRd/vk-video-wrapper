@@ -63,6 +63,20 @@ describe("SnakeBorder", () => {
     expect(window.cancelAnimationFrame).toHaveBeenCalled();
   });
 
+  it("re-measures the host on every activation, even while already running", () => {
+    // Геометрия, замеренная во время входной анимации предка (popin scale 0.97),
+    // залипала: start() при running выходил раньше повторного measure().
+    const { host } = renderInHost();
+    const rectSpy = vi.spyOn(host, "getBoundingClientRect");
+
+    fireEvent.mouseEnter(host);
+    const callsAfterEnter = rectSpy.mock.calls.length;
+    expect(callsAfterEnter).toBeGreaterThan(0);
+
+    fireEvent.focusIn(host);
+    expect(rectSpy.mock.calls.length).toBeGreaterThan(callsAfterEnter);
+  });
+
   it("keeps the ring static under prefers-reduced-motion", () => {
     vi.stubGlobal(
       "matchMedia",

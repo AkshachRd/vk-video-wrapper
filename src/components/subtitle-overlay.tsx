@@ -75,7 +75,16 @@ export function SubtitleOverlay({
                 {word.text}
               </button>
             </PopoverTrigger>
-            <PopoverContent aria-label={`Слово: ${fallbackWord}`} container={popoverContainer} className="w-[282px]">
+            <PopoverContent
+              aria-label={`Слово: ${fallbackWord}`}
+              container={popoverContainer}
+              className="w-[282px]"
+              onOpenAutoFocus={(event) => {
+                // Автофокус Radix на кнопке «Сохранить слово» ложно включал её
+                // snake-кольцо (reveal по focus-within) ещё до завершения popin.
+                event.preventDefault();
+              }}
+            >
               <WordLookupPopover fallbackWord={fallbackWord} lookup={lookup} saveControl={saveControl} />
             </PopoverContent>
           </Popover>

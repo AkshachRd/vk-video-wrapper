@@ -121,10 +121,11 @@ export function SnakeBorder({ shape = "pill" }: { shape?: SnakeShape }) {
     let running = false;
     const loop = () => { phase.current += 0.1; draw(); raf.current = requestAnimationFrame(loop); };
     const start = () => {
-      if (running) return;
+      // Перемер на каждое включение: геометрия, замеренная во время входной
+      // анимации предка (transform не двигает ResizeObserver), не должна залипать.
       measure();
       draw();
-      if (reducedMotion()) return; // статичное кольцо без вращения
+      if (running || reducedMotion()) return; // статичное кольцо без вращения
       running = true;
       raf.current = requestAnimationFrame(loop);
     };

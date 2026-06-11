@@ -140,6 +140,25 @@ describe("SubtitleOverlay", () => {
     expect(screen.getByRole("button", { name: "Сохранить слово" })).toBeInTheDocument();
   });
 
+  it("keeps focus on the clicked word when the popover opens", async () => {
+    // Автофокус Radix на кнопке «Сохранить слово» ложно показывал и запускал
+    // snake-кольцо сразу при открытии попапа — до завершения входной анимации.
+    const user = userEvent.setup();
+    render(
+      <SubtitleOverlay
+        lane={lane}
+        timeMs={1200}
+        getWordSaveControl={() => ({ status: "unsaved", onToggle: vi.fn() })}
+      />,
+    );
+
+    const wordButton = screen.getByRole("button", { name: "утро!" });
+    await user.click(wordButton);
+
+    expect(screen.getByRole("dialog", { name: "Слово: утро" })).toBeInTheDocument();
+    expect(document.activeElement).toBe(wordButton);
+  });
+
   it("does not show lookup state for a different word", async () => {
     const user = userEvent.setup();
     render(
