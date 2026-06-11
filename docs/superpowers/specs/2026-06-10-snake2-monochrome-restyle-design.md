@@ -31,9 +31,11 @@ any form; the app remains `vk-video-wrapper`.
 
 ## Decisions Made With The User
 
-1. **Shell**: white window card on the gray page background, **without** the
-   decorative titlebar (no traffic-light dots, no in-app window title) — the
-   real Tauri window already provides OS chrome.
+1. **Shell**: edge-to-edge white surface filling the Tauri window; the content
+   column is centered at max-width 1140px. (Supersedes the earlier "window card
+   without titlebar" choice — after seeing it live on 2026-06-11 the user asked
+   to remove the window-in-window effect; the gray page background, card
+   radius/shadow and the `--color-page` token were dropped with it.)
 2. **Language**: all visible UI texts become Russian, including the load/track
    error messages that are currently English. Already-Russian strings stay.
 3. **Styling approach**: Tailwind-first ("approach B"). Design tokens go into
@@ -51,8 +53,7 @@ any form; the app remains `vk-video-wrapper`.
   - Colors: `--color-paper #ffffff`, `--color-paper-2 #f6f6f6`,
     `--color-paper-3 #efefef`, `--color-ink #0c0c0c`, `--color-ink-2 #707070`,
     `--color-ink-3 #a8a8a8`, `--color-line #e9e9e9`, `--color-line-2 #dcdcdc`,
-    `--color-well #0a0a0a` (video well), `--color-page #e9e9e7` (behind the
-    window card).
+    `--color-well #0a0a0a` (video well).
   - Radii: `--radius-card 20px`, `--radius-card-sm 12px`, `--radius-card-lg 25px`;
     pills use the built-in `rounded-full`.
   - Fonts: `--font-sans "IBM Plex Sans Variable", system-ui, sans-serif`,
@@ -75,7 +76,8 @@ any form; the app remains `vk-video-wrapper`.
   geometry reads it for `shape="round"`.
 - Wave SVG patterns (`--wave-a`, `--wave-b`, `--wave-ink` data-URIs) live as
   CSS variables; markup references them with `bg-(image:--wave-a)`.
-- Base styles: gray page background, `min-width 960px` / `min-height 720px`
+- Base styles: white edge-to-edge surface (`--color-paper` on body),
+  `min-width 960px` / `min-height 720px`
   preserved, `::selection` ink-on-paper, antialiasing.
 - The current dark slate theme in `styles.css` is removed. `src/App.css` (dead
   Tauri-template file, not imported anywhere) is deleted.
@@ -122,9 +124,9 @@ Ring hosts (from the handoff table):
 
 All in `src/`; logic, props, and handlers unchanged unless noted.
 
-- **`App.tsx` — shell**: gray page, centered white window card (max-width
-  1140px, `rounded-card-lg`, shadow `0 40px 90px -40px rgba(0,0,0,0.32)`), no
-  titlebar. Masthead = wave divider with generous top spacing (no wordmark).
+- **`App.tsx` — shell**: edge-to-edge white surface; the content column is
+  centered at max-width 1140px (no window card, no page-gray backdrop — see
+  Decision 1). Masthead = wave divider with generous top spacing (no wordmark).
 - **`App.tsx` — URL bar**: full-width pill (`1.5px` `line-2` border; focus →
   ink border + soft 4px ring), borderless input with placeholder
   «вставь ссылку vkvideo.ru/video…», black pill button «Загрузить →» (arrow
@@ -202,7 +204,9 @@ All in `src/`; logic, props, and handlers unchanged unless noted.
 
 Recorded so the fidelity check does not flag them:
 
-1. No decorative titlebar/traffic lights (user decision).
+1. No window-in-window chrome at all: no decorative titlebar/traffic lights and,
+   since 2026-06-11, no floating window card either — edge-to-edge white surface
+   (user decisions).
 2. Real video thumbnails on recent cards; prototype's gradient well is only the
    placeholder. No duration badge (data not stored).
 3. «ВОСПРОИЗВЕДЕНИЕ» indicator is tied to controls visibility instead of
