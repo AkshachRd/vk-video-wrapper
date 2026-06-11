@@ -1130,7 +1130,7 @@ Expected: FAIL — `Unable to find an element by: [data-testid="playing-indicato
               popoverContainer={isFullscreen ? playerContainer : undefined}
             />
             {secondaryLane ? (
-              <div data-testid="secondary-subtitle-slot" className="flex min-h-10 justify-center">
+              <div data-testid="secondary-subtitle-slot" className="flex min-h-10 w-full justify-center">
                 <SubtitleReferenceLine lane={secondaryLane} primaryCue={primaryCue} />
               </div>
             ) : null}
