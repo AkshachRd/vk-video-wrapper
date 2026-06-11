@@ -2,7 +2,7 @@
 
 ## One-Line Summary
 
-VK Video Wrapper is a local Tauri desktop app that lets a user paste a public VK Video URL, load VK-provided subtitles, render them in an app-owned overlay, and click words for a simple word popover.
+VK Video Wrapper is a local Tauri desktop app that lets a user paste a public VK Video URL, load VK-provided subtitles, render them in an app-owned overlay, click words for a dictionary popover, and save words to a local list.
 
 ## Current Product Goal
 
@@ -22,7 +22,7 @@ The user wants:
 - Input by plain video link.
 - Subtitles taken from VK's own video data, not generated externally.
 - Track selection because VK player subtitle selection does not control the app overlay.
-- A very simple word popover: only the clicked word for now.
+- A word popover: started as only the clicked word, now a dictionary card from a single source (Russian Wiktionary data via kaikki.org) with a save-word button.
 - No machine translation in v1, but architecture should allow either a second subtitle track or machine translation later.
 - Smooth reading behavior: when a word is clicked, the current subtitle line should remain visible and readable until the user is done with it.
 
@@ -45,7 +45,8 @@ The app can:
 - Render an app-owned subtitle overlay over the video.
 - Let the user select a VK subtitle track from a dropdown.
 - Keep the previous subtitle lane visible if switching tracks fails.
-- Show a popover with the clicked word.
+- Show a popover with a dictionary card for the clicked word: headword with IPA, meanings, grammar notes, and a source link (Russian Wiktionary data via kaikki.org through the Rust `lookup_word` command, for `de`/`en`/`ru` tracks; unsupported track languages get a word-only popover).
+- Save a word from the popover and list saved words in a «Слова» panel below the player, with per-word removal (SQLite storage, dedup per language + normalized word).
 - Pause at the end of the current cue after a word click.
 - Hold the inspected cue visible across late player time updates.
 - Release the held cue when the popover closes or playback resumes.
@@ -59,8 +60,8 @@ Do not add unless explicitly requested:
 - VK login or private videos.
 - Searching/browsing VK videos.
 - Machine translation UI.
-- Dictionary APIs.
-- Lemmas, examples, pronunciation, or word notes.
+- More dictionary providers or lookup languages (only Russian Wiktionary data via kaikki.org for `de`/`en`/`ru`).
+- Lemmatization of inflected forms, usage examples, or user word notes.
 - Cloud-synced or cross-device history (local recently-watched history is now in scope; resume position and favorites/pinning are not).
 - Local subtitle file import.
 - Manual subtitle editing.
@@ -73,7 +74,7 @@ Do not add unless explicitly requested:
 
 The product has two main halves:
 
-1. Rust/Tauri backend owns network access to VK embed pages and subtitle files.
+1. Rust/Tauri backend owns network access to VK embed pages, subtitle files, and dictionary lookups (kaikki.org), plus the local SQLite stores (saved words, recent videos).
 2. React frontend owns UI, subtitle parsing for display, player bridge integration, and overlay interaction.
 
 Important boundary:
@@ -119,7 +120,7 @@ Frontend flow:
 7. Bridge listens to `timeupdate`, `started`, and `resumed`.
 8. `timeupdate` drives active cue selection.
 9. `SubtitleOverlay` renders words from the active cue.
-10. Word click opens a Radix/shadcn popover and arms a pause at the cue boundary.
+10. Word click opens a Radix popover, starts a `lookup_word` dictionary request for supported track languages, and arms a pause at the cue boundary.
 
 ## Data Model Direction
 

@@ -11,7 +11,7 @@
 7. App overlay displays the active subtitle cue based on VK player time; when a Russian track is available a second read-only reference line is automatically shown below the primary line.
 8. User can switch the primary app subtitle track with the «Субтитры» dropdown.
 9. User can switch or hide the reference line with the `Перевод` dropdown (includes a "Нет" off option and all available tracks).
-10. User can click a word in the primary overlay to inspect it.
+10. User can click a word in the primary overlay to inspect it in a dictionary popover and optionally save it to the «Слова» panel.
 
 ## Recently Watched
 
@@ -75,11 +75,41 @@ https://vkvideo.ru/video-26086420_456245583
 
 ## Word Popover
 
-Clicking a subtitle word opens a popover containing only the cleaned word.
+Clicking a subtitle word opens a popover with a dictionary card for that word.
 
 The subtitle line still shows the original visible word text, including punctuation where applicable.
 
-The popover is intentionally simple for v1. Do not add translations, dictionary results, or saved-word behavior without a new product decision.
+When the primary track language maps to a supported lookup language (`de`/`en`/`ru`, regional variants like `de-DE` included), the frontend calls the Rust `lookup_word` command with the cleaned word and the track language. For unsupported track languages no lookup is started and the popover shows only the cleaned word plus the save-word button.
+
+The dictionary card (ready state) shows:
+- The dictionary headword (it can differ from the clicked form) with IPA when available.
+- A «ВИКИСЛОВАРЬ · <LANG>» source line, rendered as a link when a source URL is known.
+- A «Значение» section with up to six meanings.
+- A «Грамматика» section with part of speech and grammar tags when present.
+
+The single dictionary source is Russian Wiktionary data on kaikki.org. The backend allowlists the `kaikki.org` host, sends no-redirect requests with a 5-second timeout and a 512 KiB response cap, retries the lowercase form when the exact form is not found, and keeps an in-memory cache of found/not-found results. Do not add other dictionary providers or lookup languages without a new product decision.
+
+## Word Lookup States
+
+The popover renders one of five lookup states:
+
+- `idle` — no lookup was started (unsupported track language); only the word and the save button are shown.
+- `loading` — «Ищу в словаре...» with a spinner.
+- `ready` — the dictionary card.
+- `not-found` — «Слово не найдено в словаре».
+- `unavailable` — «Словарь сейчас недоступен» (network failures, size/time limits, parsing errors).
+
+Only a backend `not-found` error maps to the not-found state; any other lookup error maps to unavailable. Lookup responses are request-id-guarded so a late response cannot overwrite the state for a newer word click. Closing the popover resets the lookup to idle.
+
+## Saved Words
+
+Every popover state includes a save-word button. Its states: «Сохранить слово» (unsaved), «Сохраняю...», «Сохранено», «Удаляю...», and «Сохранение недоступно» (disabled when the store is unavailable). The button toggles: clicking it for an already saved word removes the word.
+
+What gets saved depends on the lookup state. With a ready lookup the app saves the dictionary headword, language, language name, first meaning, source, and source URL. Otherwise it saves the clicked word with the normalized track language (`unknown` fallback) and no meaning — saving works even when the word was not found or the track language is unsupported.
+
+Saved words persist in SQLite (`saved-words.sqlite3`) through the `list_saved_words` / `save_word` / `remove_saved_word` commands. Words are unique per language + normalized (trimmed, lowercased) word; saving an existing pair updates the stored card instead of duplicating it. The backend rejects words without alphanumeric characters.
+
+The «Слова» panel below the player lists saved words newest-first with a counter chip. Each card shows the saved word, its language code, the first meaning (or «без значения»), and a per-card remove control. Panel states: «Загружаю слова...» while loading, «Список слов недоступен» when the store is unavailable, «Сохраненных слов пока нет» when empty. Save/remove failures show small inline errors (under the popover button for save, in the panel for remove) and never clear the existing list.
 
 ## Pause At Subtitle Boundary
 
