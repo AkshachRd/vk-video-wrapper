@@ -58,6 +58,8 @@ export function PlayerControls({
         aria-label="Перемотка"
         min={0}
         max={Math.max(durationMs, 0)}
+        // value в миллисекундах: без step стрелки двигали бы перемотку на 1 мс.
+        step={1000}
         value={clampedTime}
         onChange={(event) => onSeek(Number(event.target.value))}
         style={{ "--range-fill": `${seekFillPercent}%` } as CSSProperties}

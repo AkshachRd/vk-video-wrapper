@@ -54,6 +54,20 @@ describe("PlayerControls", () => {
     expect(props.onSeek).toHaveBeenCalledWith(50000);
   });
 
+  it("steps the seek slider by one second per arrow key press", () => {
+    const props = setup({ currentTimeMs: 61000, durationMs: 100000 });
+
+    const slider = screen.getByRole("slider", {
+      name: "Перемотка",
+    }) as HTMLInputElement;
+    // jsdom не воспроизводит нативную обработку стрелок на range, поэтому
+    // нажатие стрелки моделируем по спецификации: один шаг = stepUp().
+    slider.stepUp();
+    fireEvent.change(slider, { target: { value: slider.value } });
+
+    expect(props.onSeek).toHaveBeenCalledWith(62000);
+  });
+
   it("toggles mute and shows the muted icon", async () => {
     const user = userEvent.setup();
     const props = setup({ muted: true });
