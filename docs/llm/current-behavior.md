@@ -3,13 +3,13 @@
 ## Main User Flow
 
 1. User enters a VK Video URL in the input.
-2. User clicks `Load`.
+2. User clicks «Загрузить».
 3. App clears previous video state and asks the Rust backend to load the video.
 4. Backend returns embed URL, video id, subtitle tracks, selected track id, and raw subtitle text.
 5. Frontend parses subtitle text into cues and words.
 6. VK iframe is rendered.
 7. App overlay displays the active subtitle cue based on VK player time; when a Russian track is available a second read-only reference line is automatically shown below the primary line.
-8. User can switch the primary app subtitle track with the `Subtitles` dropdown.
+8. User can switch the primary app subtitle track with the «Субтитры» dropdown.
 9. User can switch or hide the reference line with the `Перевод` dropdown (includes a "Нет" off option and all available tracks).
 10. User can click a word in the primary overlay to inspect it.
 
@@ -17,7 +17,7 @@
 
 The start screen (when no video is loaded) shows a "Недавние" grid of recently watched videos under the URL form.
 
-Each card shows a best-effort thumbnail and title (parsed from embed `og:image`/`og:title`, falling back to `md_title` and a `video{owner}_{id}` label) plus a relative "last watched" date. Clicking a card reloads that video through the same load path as the URL form. A per-card "×" removes one entry. A "← К списку" control returns from a loaded video to the start screen.
+Each card shows a best-effort thumbnail and title (parsed from embed `og:image`/`og:title`, falling back to `md_title` and a `video{owner}_{id}` label) plus a relative "last watched" date. Clicking a card reloads that video through the same load path as the URL form. A per-card "×" removes one entry. A "← Назад" control returns from a loaded video to the start screen.
 
 History is automatic: every successful load is recorded via `record_recent_video` (best-effort; a failure never disturbs playback). Entries are deduplicated by `{ownerId}_{videoId}`, ordered by last watched, and capped at the newest 24. Storage is SQLite (`recent-videos.sqlite3`), mirroring saved words; an unavailable store shows "История недоступна" and never blocks video loading.
 

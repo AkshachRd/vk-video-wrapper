@@ -79,6 +79,8 @@ Frontend:
 - `src/components/video-player.tsx`: VK iframe wrapper and bridge initialization.
 - `src/components/subtitle-overlay.tsx`: active cue rendering, word buttons, popover lifecycle.
 - `src/components/subtitle-reference-line.tsx`: read-only secondary subtitle line (no word clicks, no popover, no dictionary, no saved words).
+- `src/components/snake-border.tsx`: decorative "stitch ring" hover overlay (Змейка 2 visual style); presentational only.
+- `src/components/wave.tsx`: decorative animated wave divider.
 - `src/lib/vk-player/vk-player-bridge.ts`: thin wrapper around `VK.VideoPlayer`; exposes play/pause/seek/setVolume/mute/unmute and events timeupdate/started/resumed/paused/ended/volumechange/adStarted/adCompleted.
 - `src/lib/subtitles/parse-webvtt.ts`: WebVTT/SRT-ish parsing and VK inline markup cleanup.
 - `src/lib/subtitles/select-active-cue.ts`: active cue lookup by time.
@@ -94,6 +96,12 @@ Backend:
 - `src-tauri/src/vk/command.rs`: Tauri commands and loaded-video assembly.
 - `src-tauri/src/vk/errors.rs`: error mapping.
 - `src-tauri/src/recent_videos.rs`: SQLite store and Tauri commands for recently watched videos.
+
+Visual style: monochrome "Змейка 2" theme; design tokens live as Tailwind v4 `@theme`
+variables in `src/styles.css`, components are styled with Tailwind utilities. The
+design reference bundle is vendored at `docs/design/snake2-handoff/` (see
+`docs/superpowers/specs/2026-06-10-snake2-monochrome-restyle-design.md`). The old
+shadcn-style `ui/button|input|alert` primitives were removed; `ui/popover.tsx` remains.
 
 ## VK Integration Facts
 
