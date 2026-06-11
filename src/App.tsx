@@ -955,7 +955,13 @@ export default function App() {
                         popoverContainer={isFullscreen ? playerContainer : undefined}
                       />
                       {secondaryLane ? (
-                        <div data-testid="secondary-subtitle-slot" className="flex min-h-10 justify-center">
+                        <div
+                          data-testid="secondary-subtitle-slot"
+                          // w-full: max-w-[88%] пилюли должен считаться от ширины видео,
+                          // а не от сжатого по содержимому слота — иначе пилюля всегда
+                          // ограничена 88% собственной ширины и переносит короткие фразы
+                          className="flex min-h-10 w-full justify-center"
+                        >
                           <SubtitleReferenceLine lane={secondaryLane} primaryCue={primaryCue} />
                         </div>
                       ) : null}
