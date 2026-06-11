@@ -93,7 +93,9 @@ TSX reference from the handoff README (§ SnakeBorder) with these changes:
 
 - Visual classes become Tailwind utilities inside the component. The host gets
   `group/snake` (plus `relative` and visible overflow); the floating `<svg>`
-  reveals on `group-hover/snake:` / `group-focus-within/snake:`; the `<path>`
+  reveals on `group-hover/snake:` / `group-focus-visible/snake:` (focus-visible,
+  not the prototype's focus-within: a mouse click also focuses the button and
+  the ring would stick visible after clicking); the `<path>`
   uses the stitch look (continuous ring, no dasharray).
 - The global `.snakes`/`.stitch`/`.curves` mode classes from the prototype are
   dropped — Змейка 2 is the only mode; there are no runtime toggles and no

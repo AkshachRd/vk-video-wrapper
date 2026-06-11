@@ -535,7 +535,7 @@ export function SnakeBorder({ shape = "pill" }: { shape?: SnakeShape }) {
         "pointer-events-none absolute -left-(--snake-gap) -top-(--snake-gap) z-[6] overflow-visible",
         "scale-[0.96] opacity-0 [transition:opacity_0.2s_var(--ease-soft),transform_0.4s_var(--ease-spring)]",
         "group-hover/snake:scale-100 group-hover/snake:opacity-100",
-        "group-focus-within/snake:scale-100 group-focus-within/snake:opacity-100",
+        "group-focus-visible/snake:scale-100 group-focus-visible/snake:opacity-100",
       )}
     >
       <path
