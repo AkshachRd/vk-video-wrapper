@@ -12,7 +12,6 @@
   --color-line: #e9e9e9;
   --color-line-2: #dcdcdc;
   --color-well: #0a0a0a;
-  --color-page: #e9e9e7;
 
   /* Радиусы */
   --radius-card: 20px;
@@ -111,7 +110,8 @@
     margin: 0;
     min-width: 960px;
     min-height: 720px;
-    background-color: var(--color-page);
+    /* edge-to-edge: приложение — сплошная белая поверхность без карточки-окна */
+    background-color: var(--color-paper);
     font-family: var(--font-sans);
     color: var(--color-ink);
     -webkit-font-smoothing: antialiased;

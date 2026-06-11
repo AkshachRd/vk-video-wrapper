@@ -812,9 +812,8 @@ export default function App() {
     ) : null;
 
   return (
-    <main className="flex min-h-screen p-8">
-      <div className="m-auto flex w-full max-w-[1140px] flex-col overflow-hidden rounded-card-lg bg-paper shadow-[0_1px_0_rgba(0,0,0,0.04),0_40px_90px_-40px_rgba(0,0,0,0.32)]">
-        <div className="relative min-h-[640px] pb-[34px]">
+    <main className="mx-auto w-full max-w-[1140px]">
+        <div className="relative pb-[34px]">
           {/* мастхед: в этой версии дизайна — только волна */}
           <header className="px-9 pt-[34px] pb-2">
             <Wave className="mt-[18px] h-[18px]" />
@@ -1054,7 +1053,6 @@ export default function App() {
             </div>
           ) : null}
         </div>
-      </div>
     </main>
   );
 }
