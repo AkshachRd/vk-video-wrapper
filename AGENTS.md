@@ -9,7 +9,8 @@ Current MVP behavior:
 - Rust backend fetches VK embed metadata and VK-owned subtitle files.
 - React frontend renders the VK iframe player and a separate clickable subtitle overlay.
 - User can choose among VK-provided subtitle tracks with the app dropdown.
-- Clicking a subtitle word opens a small popover showing only that word.
+- Clicking a subtitle word opens a popover with a dictionary card for that word: headword with IPA, meanings, grammar notes, and a source link. Lookup goes through the Rust backend (`lookup_word`) to Russian Wiktionary data on kaikki.org and works for `de`/`en`/`ru` tracks; for unsupported track languages the popover shows only the word.
+- The popover also has a save-word button ("Сохранить слово"); saved words persist in SQLite and are listed in a "Слова" panel below the player, with per-word removal.
 - After a word click, playback pauses at the end of the current cue and keeps that cue visible until the user closes the popover or resumes playback.
 - User can also enable a second read-only reference line (another VK track) via a separate "Перевод" dropdown; the app auto-selects a Russian track as the reference when one is available.
 
@@ -26,8 +27,8 @@ Keep the MVP small:
 - One interactive subtitle lane plus an optional read-only reference lane (both from VK tracks).
 - No VK auth.
 - No machine translation UI yet.
-- No dictionary lookup beyond showing the clicked word.
-- No saved words, account system, search, or local subtitle import.
+- Dictionary lookup from a single source only (Russian Wiktionary data via kaikki.org) for `de`/`en`/`ru` tracks; no other providers or languages.
+- Saved words are a local SQLite save/remove list; no account system, search, or local subtitle import.
 
 Future architecture should keep room for a machine-translation secondary lane, but do not expose unfinished controls.
 
@@ -74,17 +75,25 @@ Do not change the user's global/default `fnm` configuration unless explicitly as
 ## Codebase Map
 
 Frontend:
-- `src/App.tsx`: top-level app state, load flow, track selection, subtitle hold/pause behavior; owns secondary lane state and the "Перевод" dropdown; owns player state and clean/vk/ad mode switching.
+- `src/App.tsx`: top-level app state, load flow, track selection, subtitle hold/pause behavior; owns secondary lane state and the "Перевод" dropdown; owns player state and clean/vk/ad mode switching; owns word-lookup and saved-words state and their Tauri calls (`lookup_word`, `list_saved_words`/`save_word`/`remove_saved_word`).
 - `src/components/player-controls.tsx`: custom player control bar (play/pause, seek bar, time display, volume/mute).
 - `src/components/video-player.tsx`: VK iframe wrapper and bridge initialization.
-- `src/components/subtitle-overlay.tsx`: active cue rendering, word buttons, popover lifecycle.
+- `src/components/subtitle-overlay.tsx`: active cue rendering, word buttons, popover lifecycle; renders `word-lookup-popover.tsx` as the popover content.
+- `src/components/word-lookup-popover.tsx`: popover content for a clicked word — headword with IPA, meanings, grammar, source link, and the save-word button with its status states.
+- `src/components/saved-words-panel.tsx`: "Слова" panel below the player — saved-word cards with counter chip, per-word remove, loading/unavailable/empty states.
 - `src/components/subtitle-reference-line.tsx`: read-only secondary subtitle line (no word clicks, no popover, no dictionary, no saved words).
 - `src/components/snake-border.tsx`: decorative "stitch ring" hover overlay (Змейка 2 visual style); presentational only.
 - `src/components/wave.tsx`: decorative animated wave divider.
 - `src/lib/vk-player/vk-player-bridge.ts`: thin wrapper around `VK.VideoPlayer`; exposes play/pause/seek/setVolume/mute/unmute and events timeupdate/started/resumed/paused/ended/volumechange/adStarted/adCompleted.
+- `src/lib/player/use-controls-auto-hide.ts`: hook that hides player chrome after inactivity while playing; `reveal()` restarts the countdown on pointer activity.
 - `src/lib/subtitles/parse-webvtt.ts`: WebVTT/SRT-ish parsing and VK inline markup cleanup.
 - `src/lib/subtitles/select-active-cue.ts`: active cue lookup by time.
+- `src/lib/subtitles/select-aligned-cue.ts`: reference-line cue selection by greatest time-overlap with the active primary cue.
 - `src/lib/subtitles/types.ts`: subtitle and loaded-video contracts.
+- `src/lib/dictionary/types.ts`: word-lookup contracts and lookup status states.
+- `src/lib/dictionary/supported-lookup-language.ts`: maps track `lang` to the supported lookup languages (`de`/`en`/`ru`).
+- `src/lib/saved-words/types.ts`: saved-word contracts and save-control states.
+- `src/lib/saved-words/normalize-saved-word.ts`: saved-word normalization for deduplication.
 - `src/components/recent-videos-list.tsx`: start-screen grid of recently watched videos (thumbnail, title, relative date, remove control).
 - `src/lib/recent-videos/types.ts`: recent-video contracts.
 - `src/lib/recent-videos/format-relative-date.ts`: relative "last watched" date formatting.
@@ -93,8 +102,10 @@ Backend:
 - `src-tauri/src/vk/link_parser.rs`: VK video URL parsing.
 - `src-tauri/src/vk/embed.rs`: VK embed HTML/DASH metadata extraction.
 - `src-tauri/src/vk/subtitles.rs`: subtitle URL validation and download.
+- `src-tauri/src/vk/dictionary.rs`: `lookup_word` Tauri command — Russian Wiktionary (kaikki.org) lookup with a host allowlist, size/time limits, and an in-memory cache.
 - `src-tauri/src/vk/command.rs`: Tauri commands and loaded-video assembly.
 - `src-tauri/src/vk/errors.rs`: error mapping.
+- `src-tauri/src/saved_words.rs`: SQLite store (`saved-words.sqlite3`) and Tauri commands for saved words (list/save/remove, unique per language + normalized word).
 - `src-tauri/src/recent_videos.rs`: SQLite store and Tauri commands for recently watched videos.
 
 Visual style: monochrome "Змейка 2" theme; design tokens live as Tailwind v4 `@theme`
@@ -137,6 +148,8 @@ Important regression areas:
 - VK automatic subtitles and rolling-caption normalization.
 - Track dropdown success/failure behavior.
 - Word popover lifecycle.
+- Dictionary lookup states (loading/ready/not-found/unavailable) and supported-language gating.
+- Saved words save/remove flow, dedup by language + normalized word, and unavailable-store behavior.
 - Pause-at-cue-boundary and release-on-playback-resume behavior.
 
 For frontend tests, prefer testing user-visible behavior through React Testing Library. Mocks are acceptable around Tauri `invoke` and the iframe player boundary.
