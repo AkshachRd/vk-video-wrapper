@@ -1,9 +1,10 @@
 # Android build (Tauri mobile)
 
 Status: the Android target is **scaffolded and committed** (`src-tauri/gen/android`).
-`tauri android init` ran successfully on the dev machine on 2026-06-15. A full APK
-build/run was **not** executed in that pass — the commands below are the path to
-do it.
+`tauri android init` ran successfully on 2026-06-15, and an arm64 APK build was
+attempted: the frontend + **Rust cross-compile succeed**, but Gradle packaging is
+blocked by two machine-environment issues (see "Build status on this dev machine"
+below). The commands below are the path to a full build once those are resolved.
 
 The mobile UI is selected automatically at runtime: `usePlatform()` (src/lib/
 platform/use-platform.ts) reads `@tauri-apps/plugin-os` `platform()`, and on
@@ -58,6 +59,41 @@ List devices with `adb devices`.
   `orientation|screenSize` itself (no recreate), so `useOrientation()` flips the
   layout in place. Confirm portrait sheets ↔ landscape side-panels on rotation.
 - **INTERNET** permission is present in the manifest.
+
+## Build status on this dev machine (2026-06-15)
+
+A full `tauri android build --apk --target aarch64` was attempted. **Validated end
+to end:** the frontend build, the **arm64 Rust cross-compile** (full dep tree incl.
+bundled SQLite + reqwest, via the NDK; `libvk_video_wrapper_lib.so` built in ~1m20s)
+and the symlink into `app/src/main/jniLibs/arm64-v8a`. The Gradle/APK packaging step
+is blocked by **two machine-environment issues** (independent of this repo's code —
+they would hit any Gradle/Android build on this box):
+
+1. **Intermittent Gradle loopback failure** — `java.io.IOException: Unable to
+   establish loopback connection` at Gradle bootstrap. Reproduced with the sandbox
+   off, `-Djava.net.preferIPv4Stack=true`, and `org.gradle.daemon=false`; a bare
+   `gradlew --no-daemon` sometimes gets past it (it's flaky). Gradle/Java can't
+   reliably open a `127.0.0.1` socket here — usually **security software (AV/EDR/
+   firewall) intercepting java loopback**, or a loopback/hosts misconfig. Fixes to
+   try: add an AV/firewall exclusion for the Android Studio JBR `java.exe` and the
+   Gradle daemon; confirm `127.0.0.1 localhost` in
+   `C:\Windows\System32\drivers\etc\hosts`.
+
+2. **Stray JRE 8 picked as the Java toolchain** — once past the loopback, Gradle
+   auto-detected `C:\Program Files\Java\jre1.8.0_491` (a JRE, no `javac`) for
+   `:buildSrc:compileJava` → `does not provide … [JAVA_COMPILER]`. Fix: pin the
+   JDK. Put this in your **global** `~/.gradle/gradle.properties`
+   (`C:\Users\<you>\.gradle\gradle.properties`) so the committed project file stays
+   portable:
+   ```properties
+   org.gradle.java.home=C:/Program Files/Android/Android Studio/jbr
+   org.gradle.java.installations.auto-detect=false
+   ```
+
+**Recommended path:** open `src-tauri/gen/android` in **Android Studio** and Build →
+Build APK(s). The IDE manages the JDK/toolchain and daemon itself and typically
+sidesteps both issues. For more signal on the loopback error from the CLI, run
+`src-tauri/gen/android/gradlew.bat help --stacktrace`.
 
 ## What is committed
 
