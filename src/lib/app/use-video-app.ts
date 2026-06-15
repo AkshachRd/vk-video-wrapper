@@ -536,9 +536,8 @@ export function useVideoApp() {
     setIsPlaying(false);
   }, [resetWordLookup]);
 
-  const handleTrackChange = useCallback(
-    async (event: ChangeEvent<HTMLSelectElement>) => {
-      const nextTrackId = event.target.value;
+  const selectPrimaryTrack = useCallback(
+    async (nextTrackId: string) => {
       if (!video || !lane || isTrackLoading || nextTrackId === selectedTrackId) {
         return;
       }
@@ -607,9 +606,16 @@ export function useVideoApp() {
     [isTrackLoading, lane, resetWordLookup, selectedTrackId, video],
   );
 
-  const handleSecondaryTrackChange = useCallback(
-    async (event: ChangeEvent<HTMLSelectElement>) => {
-      const nextTrackId = event.target.value;
+  // Desktop-обёртка под <select onChange>; ядро selectPrimaryTrack принимает id напрямую (mobile-ряды).
+  const handleTrackChange = useCallback(
+    (event: ChangeEvent<HTMLSelectElement>) => {
+      void selectPrimaryTrack(event.target.value);
+    },
+    [selectPrimaryTrack],
+  );
+
+  const selectSecondaryTrack = useCallback(
+    async (nextTrackId: string) => {
       if (!video || isSecondaryTrackLoading || nextTrackId === selectedSecondaryTrackId) {
         return;
       }
@@ -675,6 +681,13 @@ export function useVideoApp() {
       setIsSecondaryTrackLoading(false);
     },
     [isSecondaryTrackLoading, selectedSecondaryTrackId, video],
+  );
+
+  const handleSecondaryTrackChange = useCallback(
+    (event: ChangeEvent<HTMLSelectElement>) => {
+      void selectSecondaryTrack(event.target.value);
+    },
+    [selectSecondaryTrack],
   );
 
   const handlePlayPause = useCallback(() => {
@@ -763,6 +776,8 @@ export function useVideoApp() {
     handleBackToList,
     handleTrackChange,
     handleSecondaryTrackChange,
+    selectPrimaryTrack,
+    selectSecondaryTrack,
     handleSubtitleWordInspect,
     handleSubtitleWordInspectEnd,
     getWordSaveControl,
