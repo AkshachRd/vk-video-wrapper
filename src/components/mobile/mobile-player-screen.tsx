@@ -20,6 +20,7 @@ type MobilePlayerScreenProps = {
   currentTimeMs: number;
   durationMs: number;
   blockInput?: boolean;
+  showCustomUi?: boolean;
   onTimeUpdate: (timeMs: number) => void;
   onDurationChange?: (durationMs: number) => void;
   onPlayingChange?: (isPlaying: boolean) => void;
@@ -49,6 +50,7 @@ export function MobilePlayerScreen({
   currentTimeMs,
   durationMs,
   blockInput,
+  showCustomUi = true,
   onTimeUpdate,
   onDurationChange,
   onPlayingChange,
@@ -97,7 +99,7 @@ export function MobilePlayerScreen({
             onControlsReady={onControlsReady}
             blockInput={blockInput}
           />
-          {isPlaying ? (
+          {showCustomUi && isPlaying ? (
             <div className="pointer-events-none absolute top-2.5 left-3 flex items-center gap-[7px] font-mono text-[9px] tracking-[0.12em] text-white/75">
               <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-white motion-reduce:animate-none" />
               ВОСПРОИЗВЕДЕНИЕ
@@ -105,7 +107,9 @@ export function MobilePlayerScreen({
           ) : null}
         </div>
 
-        <div className="flex items-center gap-3 px-5 pt-3 pb-1.5">
+        {showCustomUi ? (
+          <>
+            <div className="flex items-center gap-3 px-5 pt-3 pb-1.5">
           <button
             type="button"
             aria-label={isPlaying ? "Пауза" : "Воспроизвести"}
@@ -146,14 +150,16 @@ export function MobilePlayerScreen({
           </button>
         </div>
 
-        {cue ? (
-          <MobileReadingArea
-            cue={cue}
-            trackLabel={trackLabel}
-            referenceText={referenceText}
-            activeWordId={activeWordId}
-            onWordTap={onWordTap}
-          />
+            {cue ? (
+              <MobileReadingArea
+                cue={cue}
+                trackLabel={trackLabel}
+                referenceText={referenceText}
+                activeWordId={activeWordId}
+                onWordTap={onWordTap}
+              />
+            ) : null}
+          </>
         ) : null}
 
         <div className="h-[120px]" />

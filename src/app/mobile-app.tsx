@@ -1,6 +1,148 @@
-import type { VideoApp } from "@/lib/app/use-video-app";
+import { useState } from "react";
 
-// Заглушка фаз 1–2: полноценная мобильная вёрстка (portrait/landscape) добавляется в фазах 3–4.
-export function MobileApp(_props: { app: VideoApp }) {
-  return null;
+import { MobileStartScreen } from "@/components/mobile/mobile-start-screen";
+import { MobilePlayerScreen } from "@/components/mobile/mobile-player-screen";
+import { BottomSheet } from "@/components/mobile/bottom-sheet";
+import { WordSheetContent } from "@/components/mobile/word-sheet-content";
+import { SavedWordsSheetContent } from "@/components/mobile/saved-words-sheet-content";
+import { TrackSheetContent } from "@/components/mobile/track-sheet-content";
+import type { VideoApp } from "@/lib/app/use-video-app";
+import type { WordLookupState } from "@/lib/dictionary/types";
+import { selectAlignedCue } from "@/lib/subtitles/select-aligned-cue";
+import type { SubtitleCue, SubtitleWord } from "@/lib/subtitles/types";
+
+type Sheet = "none" | "word" | "saved" | "tracks";
+type WordTarget = { cue: SubtitleCue; word: SubtitleWord };
+
+// Лукап показываем в шторке только если он относится к выбранному слову.
+function matchedLookup(lookup: WordLookupState, fallbackWord: string): WordLookupState {
+  if (lookup.status === "idle") return lookup;
+  return lookup.query.trim().toLowerCase() === fallbackWord.trim().toLowerCase()
+    ? lookup
+    : { status: "idle" };
+}
+
+export function MobileApp({ app }: { app: VideoApp }) {
+  const [sheet, setSheet] = useState<Sheet>("none");
+  const [wordTarget, setWordTarget] = useState<WordTarget | null>(null);
+
+  const onPlayer = Boolean(app.video && app.lane);
+  const savedWordsCount = app.savedWords.length;
+
+  const removingWordIds = app.savedWords
+    .filter((word) => app.pendingSavedWordActions[app.savedWordKey(word.language, word.normalizedWord)] === "removing")
+    .map((word) => word.id);
+
+  const referenceCue =
+    app.secondaryLane && app.primaryCue ? selectAlignedCue(app.secondaryLane.cues, app.primaryCue) : undefined;
+  const trackLabel = app.selectedTrack?.lang ? app.selectedTrack.lang.toUpperCase() : "—";
+
+  const closeWordSheet = () => {
+    app.handleSubtitleWordInspectEnd();
+    setWordTarget(null);
+    setSheet("none");
+  };
+
+  const onWordTap = (cue: SubtitleCue, word: SubtitleWord) => {
+    setWordTarget({ cue, word });
+    setSheet("word");
+    app.handleSubtitleWordInspect(cue, word);
+  };
+
+  const onBack = () => {
+    setWordTarget(null);
+    setSheet("none");
+    app.handleBackToList();
+  };
+
+  const fallbackWord = wordTarget ? wordTarget.word.cleanText || wordTarget.word.text : "";
+  const wordLookup = matchedLookup(app.wordLookup, fallbackWord);
+
+  return (
+    <div className="fixed inset-0 overflow-hidden bg-paper text-ink">
+      {onPlayer && app.video ? (
+        <MobilePlayerScreen
+          embedUrl={app.video.embedUrl}
+          title={app.video.title}
+          cue={app.primaryCue}
+          trackLabel={trackLabel}
+          referenceText={referenceCue?.text}
+          activeWordId={sheet === "word" ? wordTarget?.word.id : undefined}
+          isPlaying={app.isPlaying}
+          currentTimeMs={app.currentTimeMs}
+          durationMs={app.durationMs}
+          blockInput={app.blockInput}
+          showCustomUi={app.showCustomUi}
+          onTimeUpdate={app.handleTimeUpdate}
+          onDurationChange={app.handleDurationChange}
+          onPlayingChange={app.handlePlayingChange}
+          onVolumeChange={app.handleVolumeChange}
+          onAdChange={app.handleAdChange}
+          onPlaybackStart={app.handlePlaybackStart}
+          onControlsReady={app.handlePlayerControlsReady}
+          onPlayPause={app.handlePlayPause}
+          onSeek={app.handleSeek}
+          onWordTap={onWordTap}
+          onBack={onBack}
+          onOpenTracks={() => setSheet("tracks")}
+          onOpenSaved={() => setSheet("saved")}
+          savedWordsCount={savedWordsCount}
+        />
+      ) : (
+        <MobileStartScreen
+          url={app.url}
+          onUrlChange={app.setUrl}
+          isLoading={app.isLoading}
+          onSubmit={app.handleSubmit}
+          recentVideos={app.recentVideos}
+          areRecentVideosLoading={app.areRecentVideosLoading}
+          recentVideosUnavailable={app.recentVideosUnavailable}
+          recentVideosError={app.recentVideosError}
+          onSelectRecent={app.handleSelectRecentVideo}
+          onRemoveRecent={app.handleRemoveRecentVideo}
+          savedWordsCount={savedWordsCount}
+          onOpenSaved={() => setSheet("saved")}
+        />
+      )}
+
+      {sheet === "word" && wordTarget ? (
+        <BottomSheet label={`Слово: ${fallbackWord}`} onClose={closeWordSheet}>
+          <WordSheetContent
+            fallbackWord={fallbackWord}
+            lookup={wordLookup}
+            saveControl={app.getWordSaveControl(wordTarget.cue, wordTarget.word, fallbackWord, wordLookup)}
+          />
+        </BottomSheet>
+      ) : null}
+
+      {sheet === "saved" ? (
+        <BottomSheet label="Сохранённые слова" onClose={() => setSheet("none")}>
+          <SavedWordsSheetContent
+            words={app.savedWords}
+            pendingWordIds={removingWordIds}
+            freshWordId={app.freshSavedWordId}
+            error={app.savedWordsPanelError}
+            isLoading={app.areSavedWordsLoading}
+            isUnavailable={app.savedWordsUnavailable}
+            onRemove={app.handleRemoveSavedWord}
+          />
+        </BottomSheet>
+      ) : null}
+
+      {sheet === "tracks" && app.video ? (
+        <BottomSheet label="Субтитры и перевод" onClose={() => setSheet("none")}>
+          <TrackSheetContent
+            tracks={app.video.tracks}
+            selectedTrackId={app.selectedTrackId}
+            selectedSecondaryTrackId={app.selectedSecondaryTrackId}
+            isTrackLoading={app.isTrackLoading}
+            isSecondaryTrackLoading={app.isSecondaryTrackLoading}
+            onSelectPrimary={app.selectPrimaryTrack}
+            onSelectSecondary={app.selectSecondaryTrack}
+            secondaryError={app.secondaryError}
+          />
+        </BottomSheet>
+      ) : null}
+    </div>
+  );
 }
