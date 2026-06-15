@@ -113,6 +113,18 @@ java {
 Alternatively install a standard JDK 17+ and point `JAVA_HOME`/`org.gradle.java.home`
 at it, which also sidesteps Blocker 1's JBR-specific scanning.
 
+### Blocker 3 — project on D:, Cargo registry on C: breaks Kotlin incremental compile
+
+`:tauri-android:compileDebugKotlin` fails:
+`IllegalArgumentException: this and base files have different roots:
+C:\Users\…\.cargo\registry\…\tauri-2.11.2\mobile\android\…\ActivityCallback.kt and
+D:\…\gen\android`. The Tauri plugin's Kotlin sources live in the Cargo registry on
+**C:** while the project is on **D:**; Kotlin's incremental compiler
+(`RelocatableFileToPathConverter`) can't compute a relative path across Windows drive
+letters. **Fix:** `kotlin.incremental=false` in `gen/android/gradle.properties`
+(committed; re-apply after `tauri android init`). Durable alternative: put the Cargo
+registry on the same drive as the project via `CARGO_HOME=D:\.cargo`.
+
 **Recommended path:** add the Kaspersky exclusion (Blocker 1), set `JAVA_HOME` to the
 JBR, apply the `buildSrc` toolchain snippet (Blocker 2), then
 `npm run tauri android build -- --apk`. Or open `src-tauri/gen/android` in Android
