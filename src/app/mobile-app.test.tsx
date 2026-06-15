@@ -155,4 +155,13 @@ describe("MobileApp", () => {
     expect(screen.getByRole("dialog", { name: "Слово: world" })).toBeInTheDocument();
     expect(screen.getByTestId("panel-backdrop")).toBeInTheDocument();
   });
+
+  it("landscape player has a fullscreen button and no volume slider (native volume)", () => {
+    stubOrientation(true);
+    render(<MobileApp app={makeApp({ video, lane, primaryCue: cue })} />);
+
+    expect(screen.getByRole("button", { name: "Полный экран" })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Перемотка" })).toBeInTheDocument();
+    expect(screen.queryByRole("slider", { name: "Громкость" })).not.toBeInTheDocument();
+  });
 });

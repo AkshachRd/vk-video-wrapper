@@ -1,10 +1,13 @@
-import { Captions } from "lucide-react";
+import { Captions, Maximize2, Minimize2 } from "lucide-react";
 
 import { PlayerControls } from "@/components/player-controls";
 import { SnakeBorder } from "@/components/snake-border";
 import { SubtitleReferenceLine } from "@/components/subtitle-reference-line";
 import { VideoPlayer } from "@/components/video-player";
 import { MobileSubtitleLine } from "@/components/mobile/mobile-subtitle-line";
+import { useControlsAutoHide } from "@/lib/player/use-controls-auto-hide";
+import { useFullscreen } from "@/lib/player/use-fullscreen";
+import { cn } from "@/lib/utils";
 import type { SubtitleCue, SubtitleLane, SubtitleWord } from "@/lib/subtitles/types";
 import type { VkPlayerControls } from "@/lib/vk-player/vk-player-bridge";
 
@@ -71,8 +74,17 @@ export function LandscapePlayer({
   onOpenSaved,
   savedWordsCount,
 }: LandscapePlayerProps) {
+  const { ref: fullscreenRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+  // Чром (верхняя панель + контролы) авто-скрывается при воспроизведении, как на desktop;
+  // проявляется по тапу/движению. Сабы остаются видимыми всегда.
+  const { visible: chromeVisible, reveal } = useControlsAutoHide({ active: isPlaying && showCustomUi });
+
   return (
-    <div className="relative h-full w-full overflow-hidden bg-well">
+    <div
+      ref={fullscreenRef}
+      onPointerMove={reveal}
+      className={cn("relative h-full w-full overflow-hidden bg-well", !chromeVisible && "cursor-none")}
+    >
       <div className="absolute inset-0">
         <VideoPlayer
           embedUrl={embedUrl}
@@ -87,8 +99,22 @@ export function LandscapePlayer({
         />
       </div>
 
+      {/* тап по видео проявляет чром (ниже сабов z-5 и чрома z-10, поэтому тап по слову работает) */}
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        onClick={reveal}
+        className="absolute inset-0 z-[1] cursor-default bg-transparent"
+      />
+
       {/* верхний chrome: белые кнопки на видео + тёмная пилюля «Мои слова» */}
-      <div className="absolute top-4 right-6 left-[60px] z-10 flex items-center gap-3">
+      <div
+        className={cn(
+          "absolute top-4 right-6 left-[60px] z-10 flex items-center gap-3 transition-opacity duration-300",
+          chromeVisible ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      >
         <button
           type="button"
           aria-label="Назад"
@@ -109,6 +135,19 @@ export function LandscapePlayer({
           className="group/snake relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/94 text-ink [transition:scale_0.3s_var(--ease-spring)] active:scale-[0.92]"
         >
           <Captions className="h-[18px] w-[18px]" aria-hidden="true" />
+          <SnakeBorder shape="circle" stroke="paper" />
+        </button>
+        <button
+          type="button"
+          aria-label={isFullscreen ? "Выйти из полноэкранного режима" : "Полный экран"}
+          onClick={toggleFullscreen}
+          className="group/snake relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/94 text-ink [transition:scale_0.3s_var(--ease-spring)] active:scale-[0.92]"
+        >
+          {isFullscreen ? (
+            <Minimize2 className="h-[18px] w-[18px]" aria-hidden="true" />
+          ) : (
+            <Maximize2 className="h-[18px] w-[18px]" aria-hidden="true" />
+          )}
           <SnakeBorder shape="circle" stroke="paper" />
         </button>
         <button
@@ -143,9 +182,14 @@ export function LandscapePlayer({
         </div>
       ) : null}
 
-      {/* плавающая пилюля контролов (переиспользует PlayerControls) */}
+      {/* плавающая пилюля контролов (переиспользует PlayerControls; громкость скрыта — нативная) */}
       {showCustomUi ? (
-        <div className="absolute bottom-[22px] left-1/2 z-[7] w-[58%] max-w-[680px] min-w-[420px] -translate-x-1/2">
+        <div
+          className={cn(
+            "absolute bottom-[22px] left-1/2 z-[7] w-[58%] max-w-[680px] min-w-[420px] -translate-x-1/2 transition-opacity duration-300",
+            chromeVisible ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+        >
           <PlayerControls
             isPlaying={isPlaying}
             currentTimeMs={currentTimeMs}
@@ -156,6 +200,7 @@ export function LandscapePlayer({
             onSeek={onSeek}
             onSetVolume={onSetVolume}
             onToggleMute={onToggleMute}
+            showVolume={false}
           />
         </div>
       ) : null}

@@ -14,6 +14,8 @@ type PlayerControlsProps = {
   onSetVolume: (value: number) => void;
   onToggleMute: () => void;
   trailing?: ReactNode;
+  /** Mute + volume slider. Off on mobile (нативная громкость устройства). */
+  showVolume?: boolean;
 };
 
 // Круглая кнопка контролбара; экспортируется для кнопки субтитров в App.
@@ -31,6 +33,7 @@ export function PlayerControls({
   onSetVolume,
   onToggleMute,
   trailing,
+  showVolume = true,
 }: PlayerControlsProps) {
   const clampedTime = Math.min(currentTimeMs, durationMs || currentTimeMs);
   const seekFillPercent = durationMs > 0 ? (clampedTime / durationMs) * 100 : 0;
@@ -68,32 +71,36 @@ export function PlayerControls({
         className="range-ink min-w-0 flex-1"
       />
 
-      <button
-        type="button"
-        aria-label={muted ? "Включить звук" : "Выключить звук"}
-        onClick={onToggleMute}
-        className={playerControlButtonClassName}
-      >
-        {muted ? (
-          <VolumeX className="h-[18px] w-[18px]" aria-hidden="true" />
-        ) : (
-          <Volume2 className="h-[18px] w-[18px]" aria-hidden="true" />
-        )}
-      </button>
+      {showVolume ? (
+        <>
+          <button
+            type="button"
+            aria-label={muted ? "Включить звук" : "Выключить звук"}
+            onClick={onToggleMute}
+            className={playerControlButtonClassName}
+          >
+            {muted ? (
+              <VolumeX className="h-[18px] w-[18px]" aria-hidden="true" />
+            ) : (
+              <Volume2 className="h-[18px] w-[18px]" aria-hidden="true" />
+            )}
+          </button>
 
-      <input
-        type="range"
-        aria-label="Громкость"
-        min={0}
-        max={1}
-        step={0.05}
-        value={volumeValue}
-        onChange={(event) => onSetVolume(Number(event.target.value))}
-        style={{ "--range-fill": `${volumeValue * 100}%` } as CSSProperties}
-        className="range-ink w-[60px] shrink-0"
-      />
+          <input
+            type="range"
+            aria-label="Громкость"
+            min={0}
+            max={1}
+            step={0.05}
+            value={volumeValue}
+            onChange={(event) => onSetVolume(Number(event.target.value))}
+            style={{ "--range-fill": `${volumeValue * 100}%` } as CSSProperties}
+            className="range-ink w-[60px] shrink-0"
+          />
+        </>
+      ) : null}
 
-      <span aria-hidden="true" className="h-5 w-px shrink-0 bg-line-2" />
+      {trailing ? <span aria-hidden="true" className="h-5 w-px shrink-0 bg-line-2" /> : null}
 
       {trailing}
     </div>
