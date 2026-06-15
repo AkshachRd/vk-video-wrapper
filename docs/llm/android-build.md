@@ -65,35 +65,58 @@ List devices with `adb devices`.
 A full `tauri android build --apk --target aarch64` was attempted. **Validated end
 to end:** the frontend build, the **arm64 Rust cross-compile** (full dep tree incl.
 bundled SQLite + reqwest, via the NDK; `libvk_video_wrapper_lib.so` built in ~1m20s)
-and the symlink into `app/src/main/jniLibs/arm64-v8a`. The Gradle/APK packaging step
-is blocked by **two machine-environment issues** (independent of this repo's code —
-they would hit any Gradle/Android build on this box):
+and the symlink into `app/src/main/jniLibs/arm64-v8a`. Gradle/APK packaging is blocked
+by **two machine-environment issues** (independent of this repo's code — they would
+hit any Gradle build on this box). Both were root-caused on 2026-06-15:
 
-1. **Intermittent Gradle loopback failure** — `java.io.IOException: Unable to
-   establish loopback connection` at Gradle bootstrap. Reproduced with the sandbox
-   off, `-Djava.net.preferIPv4Stack=true`, and `org.gradle.daemon=false`; a bare
-   `gradlew --no-daemon` sometimes gets past it (it's flaky). Gradle/Java can't
-   reliably open a `127.0.0.1` socket here — usually **security software (AV/EDR/
-   firewall) intercepting java loopback**, or a loopback/hosts misconfig. Fixes to
-   try: add an AV/firewall exclusion for the Android Studio JBR `java.exe` and the
-   Gradle daemon; confirm `127.0.0.1 localhost` in
-   `C:\Windows\System32\drivers\etc\hosts`.
+### Blocker 1 — Kaspersky intercepts Java's loopback (`Unable to establish loopback connection`)
 
-2. **Stray JRE 8 picked as the Java toolchain** — once past the loopback, Gradle
-   auto-detected `C:\Program Files\Java\jre1.8.0_491` (a JRE, no `javac`) for
-   `:buildSrc:compileJava` → `does not provide … [JAVA_COMPILER]`. Fix: pin the
-   JDK. Put this in your **global** `~/.gradle/gradle.properties`
-   (`C:\Users\<you>\.gradle\gradle.properties`) so the committed project file stays
-   portable:
-   ```properties
-   org.gradle.java.home=C:/Program Files/Android/Android Studio/jbr
-   org.gradle.java.installations.auto-detect=false
-   ```
+Full trace: `java.io.IOException: Unable to establish loopback connection` at
+`sun.nio.ch.PipeImpl$Initializer$LoopbackConnector.run`. This is Java NIO's internal
+**self-pipe**: it binds a transient `127.0.0.1` listening port, connects to itself,
+and verifies a secret handshake. Evidence gathered:
 
-**Recommended path:** open `src-tauri/gen/android` in **Android Studio** and Build →
-Build APK(s). The IDE manages the JDK/toolchain and daemon itself and typically
-sidesteps both issues. For more signal on the loopback error from the CLI, run
-`src-tauri/gen/android/gradlew.bat help --stacktrace`.
+- A plain Java `ServerSocket` loopback test and `Pipe.open()` ×8 on the JBR both
+  **succeed** in isolation — so loopback/IPv6/hosts/ports are fine (TCP dynamic range
+  49152–65535, only ~67 TIME_WAIT). It only fails under Gradle's rapid port churn.
+- This machine runs **Kaspersky Endpoint Security** (`avp.exe` ×2, `klnagent`
+  listening on loopback ports) and a `wazuh-agent`. Kaspersky's network-traffic
+  scanning connects to newly-opened loopback listeners, so it wins the race against
+  PipeImpl's self-connect → the secret handshake fails → "Unable to establish loopback
+  connection." Classic Kaspersky-vs-Gradle failure mode. `preferIPv4Stack`,
+  `--no-daemon`, and sandbox-off do **not** help; it cannot be fixed from Gradle/Java
+  config.
+
+**Fix (needs Kaspersky admin):** in Kaspersky → Settings → *Threats and Exclusions →
+Trusted applications*, add the Android Studio JBR java
+(`C:\Program Files\Android\Android Studio\jbr\bin\java.exe`) with **"Do not scan
+network traffic"** (or have IT exclude the build / disable Web-AntiVirus port
+monitoring for it). Then the build proceeds. Building inside **Android Studio** keeps a
+single long-lived daemon and may also avoid the per-run rescan.
+
+### Blocker 2 — kotlin-dsl wants Java 8, but only a JRE exists
+
+Once past the loopback, `:buildSrc:compileJava` fails: the `kotlin-dsl` plugin compiles
+`buildSrc` against a **Java 8 toolchain**, and Gradle auto-detects the only Java 8 here
+— `C:\Program Files\Java\jre1.8.0_491`, a **JRE without `javac`** →
+`does not provide … [JAVA_COMPILER]`. The sole JDK on the machine is the JBR (21).
+
+**Fix** — compile `buildSrc` with the JBR 21 instead of Java 8. With `JAVA_HOME` set to
+the JBR, add to `src-tauri/gen/android/buildSrc/build.gradle.kts` (re-apply after
+`tauri android init` regenerates it):
+```kotlin
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+}
+```
+(Verified the override takes effect — the toolchain request switched from 8 to 21.)
+Alternatively install a standard JDK 17+ and point `JAVA_HOME`/`org.gradle.java.home`
+at it, which also sidesteps Blocker 1's JBR-specific scanning.
+
+**Recommended path:** add the Kaspersky exclusion (Blocker 1), set `JAVA_HOME` to the
+JBR, apply the `buildSrc` toolchain snippet (Blocker 2), then
+`npm run tauri android build -- --apk`. Or open `src-tauri/gen/android` in Android
+Studio and Build → Build APK(s).
 
 ## What is committed
 
