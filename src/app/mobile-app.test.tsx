@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/video-player", () => ({
   VideoPlayer: () => <div data-testid="video-player" />,
@@ -35,6 +35,21 @@ const video: LoadedVideo = {
 };
 
 const lane: SubtitleLane = { role: "primary", source: "vk-track", trackId: "en", cues: [cue] };
+
+function stubOrientation(landscape: boolean) {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("landscape") ? landscape : !landscape,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }));
+}
+
+afterEach(() => vi.unstubAllGlobals());
 
 function makeApp(overrides: Partial<VideoApp> = {}): VideoApp {
   const base = {
@@ -127,5 +142,17 @@ describe("MobileApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "Дорожки" }));
     expect(screen.getByRole("dialog", { name: "Субтитры и перевод" })).toBeInTheDocument();
     expect(screen.getByRole("listbox", { name: "Субтитры" })).toBeInTheDocument();
+  });
+
+  it("renders the landscape player and opens a right side panel in landscape", () => {
+    stubOrientation(true);
+    const app = makeApp({ video, lane, primaryCue: cue });
+    render(<MobileApp app={app} />);
+
+    // тап по слову в оверлейных сабах открывает боковую панель (не нижнюю шторку)
+    fireEvent.click(screen.getByRole("button", { name: "world" }));
+    expect(app.handleSubtitleWordInspect).toHaveBeenCalledWith(cue, cue.words[1]);
+    expect(screen.getByRole("dialog", { name: "Слово: world" })).toBeInTheDocument();
+    expect(screen.getByTestId("panel-backdrop")).toBeInTheDocument();
   });
 });

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { BottomSheet } from "./bottom-sheet";
+import { SidePanel } from "./side-panel";
 import { WordSheetContent } from "./word-sheet-content";
 import { SavedWordsSheetContent } from "./saved-words-sheet-content";
 import { TrackSheetContent } from "./track-sheet-content";
@@ -20,6 +21,21 @@ describe("BottomSheet", () => {
     expect(screen.getByRole("dialog", { name: "Слово: hello" })).toBeInTheDocument();
     expect(screen.getByText("body")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("sheet-backdrop"));
+    expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("SidePanel", () => {
+  it("renders children inside a labelled dialog and closes on backdrop tap", () => {
+    const onClose = vi.fn();
+    render(
+      <SidePanel label="Слово: hello" onClose={onClose}>
+        <p>body</p>
+      </SidePanel>,
+    );
+    expect(screen.getByRole("dialog", { name: "Слово: hello" })).toBeInTheDocument();
+    expect(screen.getByText("body")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("panel-backdrop"));
     expect(onClose).toHaveBeenCalled();
   });
 });

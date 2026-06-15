@@ -26,9 +26,11 @@ const GAP_BY_SHAPE: Record<SnakeShape, string> = {
 export function SnakeBorder({
   shape = "pill",
   always = false,
+  stroke = "ink",
 }: {
   shape?: SnakeShape;
   always?: boolean;
+  stroke?: "ink" | "paper";
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
@@ -202,7 +204,10 @@ export function SnakeBorder({
         ref={pathRef}
         pathLength={100}
         vectorEffect="non-scaling-stroke"
-        className="fill-none stroke-ink [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:var(--snake-sw)]"
+        className={cn(
+          "fill-none [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:var(--snake-sw)]",
+          stroke === "paper" ? "stroke-paper" : "stroke-ink",
+        )}
       />
     </svg>
   );

@@ -107,6 +107,18 @@ describe("SnakeBorder", () => {
     expect(window.cancelAnimationFrame).toHaveBeenCalled();
   });
 
+  it("uses a white stroke when stroke='paper'", () => {
+    const result = render(
+      <button type="button" className="group/snake relative">
+        on video
+        <SnakeBorder shape="circle" stroke="paper" />
+      </button>,
+    );
+    const path = result.getByRole("button").querySelector("svg path")!;
+    expect(path).toHaveClass("stroke-paper");
+    expect(path).not.toHaveClass("stroke-ink");
+  });
+
   it("keeps the ring static under prefers-reduced-motion", () => {
     vi.stubGlobal(
       "matchMedia",

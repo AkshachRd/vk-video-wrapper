@@ -2,12 +2,15 @@ import { useState } from "react";
 
 import { MobileStartScreen } from "@/components/mobile/mobile-start-screen";
 import { MobilePlayerScreen } from "@/components/mobile/mobile-player-screen";
+import { LandscapePlayer } from "@/components/mobile/landscape-player";
 import { BottomSheet } from "@/components/mobile/bottom-sheet";
+import { SidePanel } from "@/components/mobile/side-panel";
 import { WordSheetContent } from "@/components/mobile/word-sheet-content";
 import { SavedWordsSheetContent } from "@/components/mobile/saved-words-sheet-content";
 import { TrackSheetContent } from "@/components/mobile/track-sheet-content";
 import type { VideoApp } from "@/lib/app/use-video-app";
 import type { WordLookupState } from "@/lib/dictionary/types";
+import { useOrientation } from "@/lib/platform/use-orientation";
 import { selectAlignedCue } from "@/lib/subtitles/select-aligned-cue";
 import type { SubtitleCue, SubtitleWord } from "@/lib/subtitles/types";
 
@@ -23,10 +26,14 @@ function matchedLookup(lookup: WordLookupState, fallbackWord: string): WordLooku
 }
 
 export function MobileApp({ app }: { app: VideoApp }) {
+  const orientation = useOrientation();
   const [sheet, setSheet] = useState<Sheet>("none");
   const [wordTarget, setWordTarget] = useState<WordTarget | null>(null);
 
   const onPlayer = Boolean(app.video && app.lane);
+  const useLandscapePlayer = orientation === "landscape" && onPlayer;
+  // В landscape шторки снизу закрыли бы (короткое) видео — выезжаем сбоку.
+  const Shell = orientation === "landscape" ? SidePanel : BottomSheet;
   const savedWordsCount = app.savedWords.length;
 
   const removingWordIds = app.savedWords
@@ -60,7 +67,38 @@ export function MobileApp({ app }: { app: VideoApp }) {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-paper text-ink">
-      {onPlayer && app.video ? (
+      {useLandscapePlayer && app.video ? (
+        <LandscapePlayer
+          embedUrl={app.video.embedUrl}
+          title={app.video.title}
+          cue={app.primaryCue}
+          secondaryLane={app.secondaryLane}
+          activeWordId={sheet === "word" ? wordTarget?.word.id : undefined}
+          isPlaying={app.isPlaying}
+          currentTimeMs={app.currentTimeMs}
+          durationMs={app.durationMs}
+          volume={app.volume}
+          muted={app.muted}
+          blockInput={app.blockInput}
+          showCustomUi={app.showCustomUi}
+          onTimeUpdate={app.handleTimeUpdate}
+          onDurationChange={app.handleDurationChange}
+          onPlayingChange={app.handlePlayingChange}
+          onVolumeChange={app.handleVolumeChange}
+          onAdChange={app.handleAdChange}
+          onPlaybackStart={app.handlePlaybackStart}
+          onControlsReady={app.handlePlayerControlsReady}
+          onPlayPause={app.handlePlayPause}
+          onSeek={app.handleSeek}
+          onSetVolume={app.handleSetVolume}
+          onToggleMute={app.handleToggleMute}
+          onWordTap={onWordTap}
+          onBack={onBack}
+          onOpenTracks={() => setSheet("tracks")}
+          onOpenSaved={() => setSheet("saved")}
+          savedWordsCount={savedWordsCount}
+        />
+      ) : onPlayer && app.video ? (
         <MobilePlayerScreen
           embedUrl={app.video.embedUrl}
           title={app.video.title}
@@ -106,17 +144,17 @@ export function MobileApp({ app }: { app: VideoApp }) {
       )}
 
       {sheet === "word" && wordTarget ? (
-        <BottomSheet label={`Слово: ${fallbackWord}`} onClose={closeWordSheet}>
+        <Shell label={`Слово: ${fallbackWord}`} onClose={closeWordSheet}>
           <WordSheetContent
             fallbackWord={fallbackWord}
             lookup={wordLookup}
             saveControl={app.getWordSaveControl(wordTarget.cue, wordTarget.word, fallbackWord, wordLookup)}
           />
-        </BottomSheet>
+        </Shell>
       ) : null}
 
       {sheet === "saved" ? (
-        <BottomSheet label="Сохранённые слова" onClose={() => setSheet("none")}>
+        <Shell label="Сохранённые слова" onClose={() => setSheet("none")}>
           <SavedWordsSheetContent
             words={app.savedWords}
             pendingWordIds={removingWordIds}
@@ -126,11 +164,11 @@ export function MobileApp({ app }: { app: VideoApp }) {
             isUnavailable={app.savedWordsUnavailable}
             onRemove={app.handleRemoveSavedWord}
           />
-        </BottomSheet>
+        </Shell>
       ) : null}
 
       {sheet === "tracks" && app.video ? (
-        <BottomSheet label="Субтитры и перевод" onClose={() => setSheet("none")}>
+        <Shell label="Субтитры и перевод" onClose={() => setSheet("none")}>
           <TrackSheetContent
             tracks={app.video.tracks}
             selectedTrackId={app.selectedTrackId}
@@ -141,7 +179,7 @@ export function MobileApp({ app }: { app: VideoApp }) {
             onSelectSecondary={app.selectSecondaryTrack}
             secondaryError={app.secondaryError}
           />
-        </BottomSheet>
+        </Shell>
       ) : null}
     </div>
   );
