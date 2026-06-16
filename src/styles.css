@@ -12,7 +12,6 @@
   --color-line: #e9e9e9;
   --color-line-2: #dcdcdc;
   --color-well: #0a0a0a;
-  --color-page: #e9e9e7;
 
   /* Радиусы */
   --radius-card: 20px;
@@ -39,6 +38,10 @@
   --animate-pulse-dot: pulse-dot 1.5s var(--ease-soft) infinite;
   --animate-uslither: uslither 0.75s linear infinite;
   --animate-chkin: chkin 0.4s var(--ease-spring) forwards;
+  /* Мобильные шторки/панели (хендофф mobile.css/landscape.css) */
+  --animate-sheetup: sheetup 0.4s var(--ease-spring) both;
+  --animate-panelin: panelin 0.4s var(--ease-spring) both;
+  --animate-backin: backin 0.28s var(--ease-soft) both;
 
   @keyframes slither {
     from { background-position-x: 0; }
@@ -87,6 +90,18 @@
   @keyframes chkin {
     to { scale: 1; }
   }
+  @keyframes sheetup {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes panelin {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes backin {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }
 
 :root {
@@ -109,9 +124,10 @@
 @layer base {
   body {
     margin: 0;
-    min-width: 960px;
-    min-height: 720px;
-    background-color: var(--color-page);
+    /* min-width/min-height сняты: мобильная вёрстка (portrait) должна жить на
+       узких экранах. Десктопная раскладка держит свой минимум на корне DesktopApp. */
+    /* edge-to-edge: приложение — сплошная белая поверхность без карточки-окна */
+    background-color: var(--color-paper);
     font-family: var(--font-sans);
     color: var(--color-ink);
     -webkit-font-smoothing: antialiased;

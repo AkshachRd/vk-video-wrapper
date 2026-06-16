@@ -38,6 +38,20 @@ describe("PlayerControls", () => {
     expect(screen.getByRole("button", { name: "Пауза" })).toBeInTheDocument();
   });
 
+  it("shows volume controls by default", () => {
+    setup();
+    expect(screen.getByRole("slider", { name: "Громкость" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Выключить звук" })).toBeInTheDocument();
+  });
+
+  it("hides volume controls when showVolume is false", () => {
+    setup({ showVolume: false });
+    expect(screen.queryByRole("slider", { name: "Громкость" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Выключить звук" })).not.toBeInTheDocument();
+    // перемотка остаётся
+    expect(screen.getByRole("slider", { name: "Перемотка" })).toBeInTheDocument();
+  });
+
   it("renders elapsed and total time as H:MM:SS / M:SS", () => {
     setup({ currentTimeMs: 61000, durationMs: 6203000 });
 

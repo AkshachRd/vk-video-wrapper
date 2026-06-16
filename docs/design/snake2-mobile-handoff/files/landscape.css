@@ -1,0 +1,119 @@
+/* ============================================================
+   landscape.css — ЛУПА, iPhone в горизонтальной ориентации.
+   Reuses mono.css tokens + snake/stitch + mobile.css sheet innards.
+   ============================================================ */
+
+.land-stage {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 28px; background: #d8d6cf;
+}
+
+/* ---- landscape bezel (drawn here: island sits on the LEFT edge) ---- */
+.phone-land {
+  position: relative;
+  flex-shrink: 0;
+  width: 874px; height: 402px;
+  border-radius: 48px; overflow: hidden;
+  background: #000;
+  box-shadow: 0 40px 80px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.12), inset 0 0 0 1px rgba(255,255,255,0.06);
+  font-family: var(--fs-ui);
+}
+.pl-island {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  width: 37px; height: 126px; border-radius: 24px;
+  background: #000; z-index: 50;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07);
+}
+.pl-home {
+  position: absolute; bottom: 7px; left: 50%; transform: translateX(-50%);
+  width: 139px; height: 5px; border-radius: 100px;
+  background: rgba(255,255,255,0.55); z-index: 60; pointer-events: none;
+}
+
+/* ---- full-bleed video ---- */
+.pl-video {
+  position: absolute; inset: 0;
+  background: radial-gradient(100% 130% at 50% 38%, #1b1b1b, #0a0a0a);
+}
+.pl-vcenter {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  color: rgba(255,255,255,0.4); pointer-events: none;
+}
+.pl-vcenter .m-vmark { position: relative; width: 34px; height: 34px; }
+.pl-vcenter .m-vmark .ring { position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border: 2.5px solid rgba(255,255,255,0.5); border-radius: 50%; }
+.pl-vcenter .m-vmark .handle { position: absolute; right: 3px; bottom: 3px; width: 12px; height: 2.5px; border-radius: 2px; background: rgba(255,255,255,0.5); transform: rotate(45deg); transform-origin: right center; }
+.pl-vcenter .m-vlabel { font-family: var(--fs-mono); font-size: 10px; letter-spacing: 0.2em; }
+
+/* ---- top chrome ---- */
+.pl-top {
+  position: absolute; top: 16px; left: 60px; right: 24px;
+  display: flex; align-items: center; gap: 12px; z-index: 10;
+}
+.pl-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 0; flex-shrink: 0;
+  background: rgba(255,255,255,0.94); color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; position: relative;
+  transition: transform 0.3s var(--spring);
+}
+.pl-btn:active { transform: scale(0.92); }
+.pl-title {
+  font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.85);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pl-spacer { flex: 1; }
+.pl-words {
+  display: inline-flex; align-items: center; gap: 9px; flex-shrink: 0;
+  background: var(--ink); color: var(--paper); border: 0;
+  border-radius: 999px; padding: 12px 18px; font-size: 14px; font-weight: 500;
+  position: relative; transition: transform 0.3s var(--spring);
+  box-shadow: 0 10px 26px -10px rgba(0,0,0,0.6);
+}
+.pl-words:active { transform: scale(0.96); }
+.pl-words .n { font-family: var(--fs-mono); font-size: 12px; font-weight: 600; color: var(--ink); background: var(--paper); border-radius: 999px; padding: 1px 8px; }
+
+/* the snake ring needs white on dark video for top buttons */
+.pl-top .snake-path, .pl-ctrl .snake-path { stroke: var(--paper); }
+.pl-words .snake-path { stroke: var(--ink); }
+/* but panels keep ink */
+.pl-panel .snake-path { stroke: var(--ink); }
+
+/* ---- subtitles overlay (reuses .sub-card/.sub-line/.ref-line) ---- */
+.pl-subs {
+  position: absolute; left: 0; right: 0; bottom: 96px;
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  padding: 0 90px; z-index: 5; pointer-events: none;
+}
+.pl-subs .sub-card { pointer-events: auto; }
+
+/* ---- floating control pill ---- */
+.pl-ctrl {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 22px;
+  width: 58%; min-width: 420px;
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(255,255,255,0.96); border-radius: 999px;
+  padding: 7px 12px; z-index: 7;
+  box-shadow: 0 10px 30px -12px rgba(0,0,0,0.4);
+}
+
+/* ---- right slide-in panel ---- */
+.pl-back {
+  position: absolute; inset: 0; z-index: 40;
+  background: rgba(10,10,10,0.32);
+  opacity: 0; animation: backin 0.28s var(--ease) forwards;
+}
+.pl-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 41;
+  width: 350px; background: var(--paper);
+  border-radius: 28px 0 0 28px;
+  box-shadow: -16px 0 50px -12px rgba(0,0,0,0.4);
+  transform: translateX(100%); animation: panelin 0.4s var(--spring) forwards;
+  display: flex; flex-direction: column;
+  padding: 10px 0 16px;
+}
+@keyframes panelin { to { transform: translateX(0); } }
+.pl-panel .m-sheet-scroll { flex: 1; }
+.pl-panel .m-wl-hw { font-size: 26px; }
+.pl-panel .m-save { height: 52px; font-size: 15px; }

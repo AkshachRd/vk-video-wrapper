@@ -15,8 +15,23 @@ const GAP_BY_SHAPE: Record<SnakeShape, string> = {
  * «Строчка-кольцо» (Змейка 2): плотная замкнутая волнистая линия, которая
  * проявляется снаружи элемента при hover/focus и кружит по периметру.
  * Хост обязан иметь классы `group/snake relative` и видимый overflow.
+ *
+ * `always` (мобильный апгрейд хендоффа): кольцо запускается на маунте и не
+ * гаснет — для главного CTA, где сигнатура должна быть видна постоянно. На
+ * touch-экранах (нет hover) кольцо также проявляется по нажатию: запуск на
+ * `pointerdown`, гашение на `pointerup`/`pointercancel`. При переключении
+ * `always` хост обязан перемонтировать компонент (`key`), чтобы цикл стартовал
+ * заново.
  */
-export function SnakeBorder({ shape = "pill" }: { shape?: SnakeShape }) {
+export function SnakeBorder({
+  shape = "pill",
+  always = false,
+  stroke = "ink",
+}: {
+  shape?: SnakeShape;
+  always?: boolean;
+  stroke?: "ink" | "paper";
+}) {
   const svgRef = useRef<SVGSVGElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
   const raf = useRef(0);
@@ -130,13 +145,20 @@ export function SnakeBorder({ shape = "pill" }: { shape?: SnakeShape }) {
       raf.current = requestAnimationFrame(loop);
     };
     const stop = () => { running = false; cancelAnimationFrame(raf.current); };
+    const noop = () => {};
+    // При always кольцо не гаснет: leave/blur/release — no-op.
+    const release = always ? noop : stop;
 
     measure();
     draw();
+    if (always) start();
     host.addEventListener("mouseenter", start);
-    host.addEventListener("mouseleave", stop);
+    host.addEventListener("mouseleave", release);
     host.addEventListener("focusin", start);
-    host.addEventListener("focusout", stop);
+    host.addEventListener("focusout", release);
+    host.addEventListener("pointerdown", start);
+    host.addEventListener("pointerup", release);
+    host.addEventListener("pointercancel", release);
     const ro = new ResizeObserver(() => { measure(); if (!running) draw(); });
     ro.observe(host);
 
@@ -144,31 +166,48 @@ export function SnakeBorder({ shape = "pill" }: { shape?: SnakeShape }) {
       stop();
       ro.disconnect();
       host.removeEventListener("mouseenter", start);
-      host.removeEventListener("mouseleave", stop);
+      host.removeEventListener("mouseleave", release);
       host.removeEventListener("focusin", start);
-      host.removeEventListener("focusout", stop);
+      host.removeEventListener("focusout", release);
+      host.removeEventListener("pointerdown", start);
+      host.removeEventListener("pointerup", release);
+      host.removeEventListener("pointercancel", release);
     };
-  }, [shape]);
+  }, [shape, always]);
 
   return (
     <svg
       ref={svgRef}
       data-shape={shape}
+      data-always={always ? "1" : undefined}
       aria-hidden="true"
       preserveAspectRatio="none"
-      style={{ "--snake-gap": GAP_BY_SHAPE[shape] } as CSSProperties}
+      style={
+        {
+          "--snake-gap": GAP_BY_SHAPE[shape],
+          // always: форсим видимость поверх базовых opacity-0/scale-[0.96]
+          ...(always ? { opacity: 1, scale: "1" } : {}),
+        } as CSSProperties
+      }
       className={cn(
         "pointer-events-none absolute -left-(--snake-gap) -top-(--snake-gap) z-[6] overflow-visible",
         "scale-[0.96] opacity-0 [transition:opacity_0.2s_var(--ease-soft),scale_0.4s_var(--ease-spring)]",
         "group-hover/snake:scale-100 group-hover/snake:opacity-100",
-        "group-focus-within/snake:scale-100 group-focus-within/snake:opacity-100",
+        // focus-visible, а не focus-within: клик мышью тоже фокусирует кнопку,
+        // и кольцо залипало бы видимым после клика (например, по фуллскрину)
+        "group-focus-visible/snake:scale-100 group-focus-visible/snake:opacity-100",
+        // press-state на touch (нет hover): :active хоста проявляет кольцо
+        "group-active/snake:scale-100 group-active/snake:opacity-100",
       )}
     >
       <path
         ref={pathRef}
         pathLength={100}
         vectorEffect="non-scaling-stroke"
-        className="fill-none stroke-ink [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:var(--snake-sw)]"
+        className={cn(
+          "fill-none [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:var(--snake-sw)]",
+          stroke === "paper" ? "stroke-paper" : "stroke-ink",
+        )}
       />
     </svg>
   );

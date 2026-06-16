@@ -77,6 +77,48 @@ describe("SnakeBorder", () => {
     expect(rectSpy.mock.calls.length).toBeGreaterThan(callsAfterEnter);
   });
 
+  it("runs the ring continuously and marks it when `always` is set", () => {
+    const result = render(
+      <button type="button" className="group/snake relative">
+        cta
+        <SnakeBorder shape="circle" always />
+      </button>,
+    );
+    const svg = result.getByRole("button").querySelector("svg")!;
+
+    expect(svg).toHaveAttribute("data-always", "1");
+    // always → цикл стартует на маунте, без hover/press
+    expect(window.requestAnimationFrame).toHaveBeenCalled();
+  });
+
+  it("does not mark the ring when `always` is unset", () => {
+    const { svg } = renderInHost();
+    expect(svg).not.toHaveAttribute("data-always");
+  });
+
+  it("reveals the ring on pointer press and stops on release", () => {
+    const { host } = renderInHost();
+    expect(window.requestAnimationFrame).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(host);
+    expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerUp(host);
+    expect(window.cancelAnimationFrame).toHaveBeenCalled();
+  });
+
+  it("uses a white stroke when stroke='paper'", () => {
+    const result = render(
+      <button type="button" className="group/snake relative">
+        on video
+        <SnakeBorder shape="circle" stroke="paper" />
+      </button>,
+    );
+    const path = result.getByRole("button").querySelector("svg path")!;
+    expect(path).toHaveClass("stroke-paper");
+    expect(path).not.toHaveClass("stroke-ink");
+  });
+
   it("keeps the ring static under prefers-reduced-motion", () => {
     vi.stubGlobal(
       "matchMedia",
