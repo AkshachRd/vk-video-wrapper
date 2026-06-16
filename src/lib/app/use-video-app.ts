@@ -79,6 +79,8 @@ export function useVideoApp() {
   const freshSavedWordTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [selectedTagKeys, setSelectedTagKeys] = useState<string[]>([]);
   const [tagPendingWordIds, setTagPendingWordIds] = useState<string[]>([]);
+  const [generatingTagWordIds, setGeneratingTagWordIds] = useState<string[]>([]);
+  const wordTaggerAvailableRef = useRef(false);
   const [recentVideos, setRecentVideos] = useState<RecentVideo[]>([]);
   const [areRecentVideosLoading, setAreRecentVideosLoading] = useState(true);
   const [recentVideosUnavailable, setRecentVideosUnavailable] = useState(false);
@@ -140,6 +142,24 @@ export function useVideoApp() {
       .finally(() => {
         if (!cancelled) setAreRecentVideosLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const { availability } = await import("tauri-plugin-apple-intelligence-api");
+        const status = await availability();
+        if (!cancelled) wordTaggerAvailableRef.current = Boolean(status?.available);
+      } catch {
+        if (!cancelled) wordTaggerAvailableRef.current = false;
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -843,6 +863,8 @@ export function useVideoApp() {
     freshSavedWordId,
     selectedTagKeys,
     tagPendingWordIds,
+    generatingTagWordIds,
+    setGeneratingTagWordIds,
     recentVideos,
     areRecentVideosLoading,
     recentVideosUnavailable,

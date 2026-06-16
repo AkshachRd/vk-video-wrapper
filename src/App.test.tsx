@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   emitTimeUpdate: vi.fn(),
   emitPlaybackStart: vi.fn(),
   readyPlayer: vi.fn(),
+  availability: vi.fn(),
+  generate: vi.fn(),
   // secondary-line suite: captures the latest VideoPlayer props
   playerProps: { current: undefined as undefined | {
     onTimeUpdate: (ms: number) => void;
@@ -37,6 +39,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: mocks.invoke,
+}));
+
+vi.mock("tauri-plugin-apple-intelligence-api", () => ({
+  availability: mocks.availability,
+  generate: mocks.generate,
 }));
 
 vi.mock("@/lib/subtitles/parse-webvtt", () => ({
@@ -199,6 +206,8 @@ describe("App", () => {
     mocks.readyPlayer.mockReset();
     mocks.playerProps.current = undefined;
     mocks.parseMap.clear();
+    mocks.availability.mockResolvedValue({ available: false });
+    mocks.generate.mockReset();
     mocks.parseWebVtt.mockImplementation((raw: string) => {
       if (raw.includes("Hallo Welt")) {
         const cues = [
@@ -1720,6 +1729,22 @@ describe("App", () => {
       expect(mocks.invoke).toHaveBeenCalledWith("remove_word_tag", { wordId: "de:welt", tag: "дом" });
     });
     expect(await screen.findByRole("button", { name: "Снять тег дом" })).toBeInTheDocument();
+  });
+
+  it("does not call the tagger when Apple Intelligence is unavailable", async () => {
+    mocks.availability.mockResolvedValue({ available: false });
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      if (command === "load_video_from_url") return Promise.resolve(loadedVideo());
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+    await waitFor(() => expect(mocks.availability).toHaveBeenCalled());
+
+    expect(mocks.invoke).not.toHaveBeenCalledWith("build_word_tag_prompt", expect.anything());
+    expect(mocks.generate).not.toHaveBeenCalled();
   });
 });
 
