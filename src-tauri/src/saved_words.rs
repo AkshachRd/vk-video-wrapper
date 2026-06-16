@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS saved_words (
   updated_at_ms INTEGER NOT NULL,
   UNIQUE(language, normalized_word)
 );
+
+CREATE TABLE IF NOT EXISTS word_tags (
+  word_id TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  tag_display TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  UNIQUE(word_id, tag)
+);
 "#;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -33,6 +41,7 @@ pub struct SavedWord {
     pub source_url: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -87,6 +96,7 @@ impl SavedWordsState {
 pub enum SavedWordsError {
     Unavailable,
     InvalidSavedWord,
+    InvalidTag,
 }
 
 impl SavedWordsError {
@@ -94,6 +104,7 @@ impl SavedWordsError {
         match self {
             SavedWordsError::Unavailable => "saved-words-unavailable",
             SavedWordsError::InvalidSavedWord => "invalid-saved-word",
+            SavedWordsError::InvalidTag => "invalid-tag",
         }
     }
 }
@@ -109,6 +120,22 @@ fn migrate(connection: &Connection) -> Result<(), SavedWordsError> {
     connection
         .execute_batch(MIGRATION)
         .map_err(|_| SavedWordsError::Unavailable)
+}
+
+const MAX_TAG_LEN: usize = 40;
+
+fn normalize_tag(value: &str) -> Option<String> {
+    let normalized = value.trim().to_lowercase();
+
+    if normalized.is_empty() || normalized.chars().count() > MAX_TAG_LEN {
+        return None;
+    }
+
+    if normalized.chars().any(char::is_alphanumeric) {
+        Some(normalized)
+    } else {
+        None
+    }
 }
 
 fn normalize_word(value: &str) -> Option<String> {
@@ -159,11 +186,15 @@ pub fn list_saved_words_in_state(
         )
         .map_err(|_| SavedWordsError::Unavailable)?;
 
-    let words = statement
+    let mut words = statement
         .query_map([], row_to_saved_word)
         .map_err(|_| SavedWordsError::Unavailable)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| SavedWordsError::Unavailable)?;
+
+    for word in &mut words {
+        word.tags = list_word_tags_in(&connection, &word.id)?;
+    }
 
     Ok(words)
 }
@@ -231,6 +262,17 @@ pub fn remove_saved_word_in_state(
     let normalized_word =
         normalize_word(normalized_word).ok_or(SavedWordsError::InvalidSavedWord)?;
     let language = normalize_language(language);
+    let id = saved_word_id(&language, &normalized_word);
+
+    connection
+        .execute(
+            r#"
+            DELETE FROM word_tags
+            WHERE word_id = ?1
+            "#,
+            params![id],
+        )
+        .map_err(|_| SavedWordsError::Unavailable)?;
 
     connection
         .execute(
@@ -243,6 +285,87 @@ pub fn remove_saved_word_in_state(
         .map_err(|_| SavedWordsError::Unavailable)?;
 
     Ok(())
+}
+
+fn list_word_tags_in(
+    connection: &Connection,
+    word_id: &str,
+) -> Result<Vec<String>, SavedWordsError> {
+    let mut statement = connection
+        .prepare(
+            r#"
+            SELECT tag_display
+            FROM word_tags
+            WHERE word_id = ?1
+            ORDER BY created_at_ms ASC, tag ASC
+            "#,
+        )
+        .map_err(|_| SavedWordsError::Unavailable)?;
+
+    let tags = statement
+        .query_map(params![word_id], |row| row.get::<_, String>(0))
+        .map_err(|_| SavedWordsError::Unavailable)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| SavedWordsError::Unavailable)?;
+
+    Ok(tags)
+}
+
+pub fn add_word_tag_in_state(
+    state: &SavedWordsState,
+    word_id: &str,
+    tag: &str,
+    now_ms: i64,
+) -> Result<Vec<String>, SavedWordsError> {
+    let connection = state.connection()?;
+    let normalized = normalize_tag(tag).ok_or(SavedWordsError::InvalidTag)?;
+    let display = tag.trim();
+
+    let word_exists: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM saved_words WHERE id = ?1)",
+            params![word_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| SavedWordsError::Unavailable)?;
+
+    if !word_exists {
+        return Err(SavedWordsError::InvalidSavedWord);
+    }
+
+    connection
+        .execute(
+            r#"
+            INSERT INTO word_tags (word_id, tag, tag_display, created_at_ms)
+            VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(word_id, tag) DO NOTHING
+            "#,
+            params![word_id, normalized, display, now_ms],
+        )
+        .map_err(|_| SavedWordsError::Unavailable)?;
+
+    list_word_tags_in(&connection, word_id)
+}
+
+pub fn remove_word_tag_in_state(
+    state: &SavedWordsState,
+    word_id: &str,
+    tag: &str,
+) -> Result<Vec<String>, SavedWordsError> {
+    let connection = state.connection()?;
+    let normalized = normalize_tag(tag).ok_or(SavedWordsError::InvalidTag)?;
+
+    connection
+        .execute(
+            r#"
+            DELETE FROM word_tags
+            WHERE word_id = ?1 AND tag = ?2
+            "#,
+            params![word_id, normalized],
+        )
+        .map_err(|_| SavedWordsError::Unavailable)?;
+
+    list_word_tags_in(&connection, word_id)
 }
 
 #[tauri::command]
@@ -269,11 +392,29 @@ pub fn remove_saved_word(
     remove_saved_word_in_state(&state, &language, &normalized_word).map_err(String::from)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub fn add_word_tag(
+    state: tauri::State<'_, SavedWordsState>,
+    word_id: String,
+    tag: String,
+) -> Result<Vec<String>, String> {
+    add_word_tag_in_state(&state, &word_id, &tag, now_ms()).map_err(String::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn remove_word_tag(
+    state: tauri::State<'_, SavedWordsState>,
+    word_id: String,
+    tag: String,
+) -> Result<Vec<String>, String> {
+    remove_word_tag_in_state(&state, &word_id, &tag).map_err(String::from)
+}
+
 fn find_saved_word(
     connection: &Connection,
     id: &str,
 ) -> Result<Option<SavedWord>, SavedWordsError> {
-    connection
+    let word = connection
         .query_row(
             r#"
             SELECT
@@ -294,7 +435,15 @@ fn find_saved_word(
             row_to_saved_word,
         )
         .optional()
-        .map_err(|_| SavedWordsError::Unavailable)
+        .map_err(|_| SavedWordsError::Unavailable)?;
+
+    match word {
+        Some(mut word) => {
+            word.tags = list_word_tags_in(connection, id)?;
+            Ok(Some(word))
+        }
+        None => Ok(None),
+    }
 }
 
 fn row_to_saved_word(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedWord> {
@@ -309,6 +458,7 @@ fn row_to_saved_word(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedWord> {
         source_url: row.get(7)?,
         created_at_ms: row.get(8)?,
         updated_at_ms: row.get(9)?,
+        tags: Vec::new(),
     })
 }
 
@@ -418,5 +568,131 @@ mod tests {
             .unwrap();
 
         assert_eq!(table_name, "saved_words");
+    }
+
+    #[test]
+    fn list_includes_tags_in_insertion_order() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+        add_word_tag_in_state(&state, "de:haus", "существительные", 2000).unwrap();
+        add_word_tag_in_state(&state, "de:haus", "B1", 3000).unwrap();
+
+        let words = list_saved_words_in_state(&state).unwrap();
+
+        assert_eq!(
+            words[0].tags,
+            vec!["существительные".to_string(), "B1".to_string()]
+        );
+    }
+
+    #[test]
+    fn removing_word_cascades_its_tags() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+        add_word_tag_in_state(&state, "de:haus", "дом", 2000).unwrap();
+
+        remove_saved_word_in_state(&state, "de", "haus").unwrap();
+
+        assert!(tag_keys(&state).is_empty());
+    }
+
+    fn tag_keys(state: &SavedWordsState) -> Vec<String> {
+        let connection = state.connection().unwrap();
+        let mut statement = connection
+            .prepare("SELECT DISTINCT tag FROM word_tags ORDER BY tag ASC")
+            .unwrap();
+        statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn adds_tag_and_lists_it() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+
+        let tags = add_word_tag_in_state(&state, "de:haus", "Глаголы", 2000).unwrap();
+
+        assert_eq!(tags, vec!["Глаголы".to_string()]);
+        assert_eq!(tag_keys(&state), vec!["глаголы".to_string()]);
+    }
+
+    #[test]
+    fn adding_same_tag_twice_is_idempotent() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+
+        add_word_tag_in_state(&state, "de:haus", "глаголы", 2000).unwrap();
+        let tags = add_word_tag_in_state(&state, "de:haus", "Глаголы", 3000).unwrap();
+
+        assert_eq!(tags, vec!["глаголы".to_string()]);
+    }
+
+    #[test]
+    fn removing_last_tag_drops_it_from_global_set() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+        add_word_tag_in_state(&state, "de:haus", "спорт", 2000).unwrap();
+
+        let tags = remove_word_tag_in_state(&state, "de:haus", "Спорт").unwrap();
+
+        assert!(tags.is_empty());
+        assert!(tag_keys(&state).is_empty());
+    }
+
+    #[test]
+    fn rejects_empty_punctuation_or_too_long_tags() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+
+        let empty = add_word_tag_in_state(&state, "de:haus", "   ", 2000).unwrap_err();
+        let punctuation = add_word_tag_in_state(&state, "de:haus", "...", 2000).unwrap_err();
+        let too_long = add_word_tag_in_state(&state, "de:haus", &"a".repeat(41), 2000).unwrap_err();
+
+        assert_eq!(empty, SavedWordsError::InvalidTag);
+        assert_eq!(punctuation, SavedWordsError::InvalidTag);
+        assert_eq!(too_long, SavedWordsError::InvalidTag);
+    }
+
+    #[test]
+    fn tag_commands_unavailable_when_store_missing() {
+        let state = SavedWordsState::unavailable();
+
+        let add_error = add_word_tag_in_state(&state, "de:haus", "спорт", 2000).unwrap_err();
+        let remove_error = remove_word_tag_in_state(&state, "de:haus", "спорт").unwrap_err();
+
+        assert_eq!(add_error, SavedWordsError::Unavailable);
+        assert_eq!(remove_error, SavedWordsError::Unavailable);
+    }
+
+    #[test]
+    fn rejects_tag_on_missing_word() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+
+        let error = add_word_tag_in_state(&state, "de:ghost", "спорт", 1000).unwrap_err();
+
+        assert_eq!(error, SavedWordsError::InvalidSavedWord);
+    }
+
+    #[test]
+    fn migration_creates_word_tags_table() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        let connection = state.connection().unwrap();
+
+        let table_name: String = connection
+            .query_row(
+                r#"
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'word_tags'
+                "#,
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(table_name, "word_tags");
     }
 }

@@ -41,6 +41,8 @@ pub fn run() {
             saved_words::list_saved_words,
             saved_words::save_word,
             saved_words::remove_saved_word,
+            saved_words::add_word_tag,
+            saved_words::remove_word_tag,
             recent_videos::list_recent_videos,
             recent_videos::record_recent_video,
             recent_videos::remove_recent_video

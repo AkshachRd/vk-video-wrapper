@@ -9,6 +9,7 @@ export interface SavedWord {
   sourceUrl: string | null;
   createdAtMs: number;
   updatedAtMs: number;
+  tags: string[];
 }
 
 export interface SaveWordRequest {

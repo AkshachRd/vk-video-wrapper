@@ -15,6 +15,7 @@ import { getSupportedLookupLanguage } from "@/lib/dictionary/supported-lookup-la
 import type { WordLookup, WordLookupState } from "@/lib/dictionary/types";
 import type { RecentVideo, RecordRecentVideoRequest } from "@/lib/recent-videos/types";
 import { normalizeSavedWord } from "@/lib/saved-words/normalize-saved-word";
+import { collectTagOptions, normalizeTag } from "@/lib/saved-words/tags";
 import type { SavedWord, SaveWordRequest, WordSaveControl } from "@/lib/saved-words/types";
 import { parseWebVtt } from "@/lib/subtitles/parse-webvtt";
 import { selectActiveCue } from "@/lib/subtitles/select-active-cue";
@@ -36,6 +37,7 @@ const SUBTITLE_PARSE_ERROR = "Не удалось разобрать субти�
 const TRACK_PARSE_ERROR = "Не удалось разобрать субтитры этой дорожки.";
 const SAVE_WORD_ERROR = "Не удалось сохранить слово";
 const REMOVE_WORD_ERROR = "Не удалось удалить слово";
+const TAG_WORD_ERROR = "Не удалось обновить теги. Попробуйте ещё раз.";
 const SECONDARY_TRACK_ERROR = "Не удалось загрузить вторую дорожку.";
 
 const trackSelectWrapClassName =
@@ -87,6 +89,8 @@ export default function App() {
   const [savedWordsPanelError, setSavedWordsPanelError] = useState<string | undefined>();
   const [freshSavedWordId, setFreshSavedWordId] = useState<string | undefined>();
   const freshSavedWordTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [selectedTagKeys, setSelectedTagKeys] = useState<string[]>([]);
+  const [tagPendingWordIds, setTagPendingWordIds] = useState<string[]>([]);
   const [recentVideos, setRecentVideos] = useState<RecentVideo[]>([]);
   const [areRecentVideosLoading, setAreRecentVideosLoading] = useState(true);
   const [recentVideosUnavailable, setRecentVideosUnavailable] = useState(false);
@@ -303,6 +307,85 @@ export default function App() {
       clearPendingSavedWordAction(key);
     }
   }, [clearPendingSavedWordAction, setPendingSavedWordAction]);
+
+  const handleAddWordTag = useCallback(async (wordId: string, tag: string) => {
+    const display = tag.trim();
+    const key = normalizeTag(display);
+    if (!key) return;
+
+    setSavedWordsPanelError(undefined);
+    setTagPendingWordIds((ids) => (ids.includes(wordId) ? ids : [...ids, wordId]));
+    setSavedWords((words) =>
+      words.map((word) =>
+        word.id === wordId && !word.tags.some((existing) => normalizeTag(existing) === key)
+          ? { ...word, tags: [...word.tags, display] }
+          : word,
+      ),
+    );
+
+    try {
+      const tags = await invoke<string[]>("add_word_tag", { wordId, tag: display });
+      savedWordsMutatedRef.current = true;
+      setSavedWords((words) => words.map((word) => (word.id === wordId ? { ...word, tags } : word)));
+    } catch {
+      setSavedWords((words) =>
+        words.map((word) =>
+          word.id === wordId
+            ? { ...word, tags: word.tags.filter((existing) => normalizeTag(existing) !== key) }
+            : word,
+        ),
+      );
+      setSavedWordsPanelError(TAG_WORD_ERROR);
+    } finally {
+      setTagPendingWordIds((ids) => ids.filter((id) => id !== wordId));
+    }
+  }, []);
+
+  const handleRemoveWordTag = useCallback(async (wordId: string, tag: string) => {
+    const key = normalizeTag(tag);
+    if (!key) return;
+
+    setSavedWordsPanelError(undefined);
+    setTagPendingWordIds((ids) => (ids.includes(wordId) ? ids : [...ids, wordId]));
+    setSavedWords((words) =>
+      words.map((word) =>
+        word.id === wordId
+          ? { ...word, tags: word.tags.filter((existing) => normalizeTag(existing) !== key) }
+          : word,
+      ),
+    );
+
+    try {
+      const tags = await invoke<string[]>("remove_word_tag", { wordId, tag });
+      savedWordsMutatedRef.current = true;
+      setSavedWords((words) => words.map((word) => (word.id === wordId ? { ...word, tags } : word)));
+    } catch {
+      setSavedWords((words) =>
+        words.map((word) =>
+          word.id === wordId && !word.tags.some((existing) => normalizeTag(existing) === key)
+            ? { ...word, tags: [...word.tags, tag] }
+            : word,
+        ),
+      );
+      setSavedWordsPanelError(TAG_WORD_ERROR);
+    } finally {
+      setTagPendingWordIds((ids) => ids.filter((id) => id !== wordId));
+    }
+  }, []);
+
+  const handleToggleTagFilter = useCallback((key: string) => {
+    setSelectedTagKeys((keys) => (keys.includes(key) ? keys.filter((existing) => existing !== key) : [...keys, key]));
+  }, []);
+
+  const handleResetTagFilter = useCallback(() => setSelectedTagKeys([]), []);
+
+  useEffect(() => {
+    const available = new Set(collectTagOptions(savedWords).map((option) => option.key));
+    setSelectedTagKeys((keys) => {
+      const next = keys.filter((key) => available.has(key));
+      return next.length === keys.length ? keys : next;
+    });
+  }, [savedWords]);
 
   const getWordSaveControl = useCallback(
     (_cue: SubtitleCue, _word: SubtitleWord, fallbackWord: string, lookup: WordLookupState): WordSaveControl => {
@@ -1049,6 +1132,12 @@ export default function App() {
                   freshWordId={freshSavedWordId}
                   error={savedWordsPanelError}
                   onRemove={handleRemoveSavedWord}
+                  selectedTagKeys={selectedTagKeys}
+                  onToggleTagFilter={handleToggleTagFilter}
+                  onResetTagFilter={handleResetTagFilter}
+                  tagPendingWordIds={tagPendingWordIds}
+                  onAddTag={handleAddWordTag}
+                  onRemoveTag={handleRemoveWordTag}
                 />
               </div>
             </div>
