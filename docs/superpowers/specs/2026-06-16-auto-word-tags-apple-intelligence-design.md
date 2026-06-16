@@ -28,7 +28,19 @@
 `pub use`), наружу торчат только `init()`, `Error`, `Result`. Вызвать
 `generate()` / `availability()` из своей Rust-команды нельзя, и в Tauri нет
 обобщённого «позвать команду из Rust». Поэтому **сам вызов модели возможен только
-из фронтенда** через npm-пакет `tauri-plugin-apple-intelligence-api`.
+из фронтенда**.
+
+Реализация: npm-обёртка `tauri-plugin-apple-intelligence-api` устанавливается из
+GitHub и не содержит собранного JS (её объявленные `dist-js/*` отсутствуют после
+установки), поэтому импортировать её нельзя. Обёртка — лишь тонкая прослойка над
+Tauri `invoke`, так что мы зовём команды плагина напрямую через
+`@tauri-apps/api/core` (он уже в зависимостях и уже мокается в тестах):
+- `invoke<{ available: boolean }>("plugin:apple-intelligence|availability")`
+- `invoke<string>("plugin:apple-intelligence|generate", { prompt })`
+
+Это убирает сломанную зависимость, чинит резолв при сборке и делает тесты
+воспроизводимыми. Rust-плагин по-прежнему регистрируется как `apple-intelligence`,
+поэтому строки команд бьют ровно в те же команды плагина.
 
 Гибрид сохраняет дух «логика в Rust»: фронт делает лишь неизбежный JS-вызов
 модели, а вся ценная (и тестируемая) логика — построение промпта, парсинг,
@@ -73,8 +85,9 @@ JS-команды плагина требуют разрешения в capabili
 
 ### Доступность
 
-Отдельной бэкенд-команды нет. Доступность фронт узнаёт прямым JS-вызовом
-`availability()` (возвращает `{ available: bool, reason?: string }`). На не-macOS
+Отдельной бэкенд-команды нет. Доступность фронт узнаёт через
+`invoke("plugin:apple-intelligence|availability")` (возвращает
+`{ available: bool, reason?: string }`). На не-macOS (плагин не зарегистрирован)
 вызов отклоняется → трактуем как `available = false`.
 
 ### Хранение
@@ -149,10 +162,9 @@ parse_theme_tags(raw: &str) -> Vec<String>
 
 ### Доступность (один раз при старте)
 
-`useEffect` на маунте: динамический импорт `tauri-plugin-apple-intelligence-api`,
-вызов `availability()`, в состояние пишется `wordTaggerAvailable: boolean`
-(`status.available`). Любая ошибка/reject → `false`. Значение также держим в
-`ref`, чтобы триггер не пересоздавал колбэк сохранения.
+`useEffect` на маунте: `invoke("plugin:apple-intelligence|availability")`, в
+`wordTaggerAvailableRef` пишется `status.available`. Любая ошибка/reject → `false`.
+Значение держим в `ref`, чтобы триггер не пересоздавал колбэк сохранения.
 
 ### Триггер (фоновый поток генерации)
 
@@ -166,7 +178,7 @@ parse_theme_tags(raw: &str) -> Vec<String>
    редактора тегов).
 2. `const prompt = await invoke<string | null>("build_word_tag_prompt", { wordId })`;
    если `null` — выходим (skip).
-3. `const raw = await generate(prompt)` (JS-вызов плагина).
+3. `const raw = await invoke<string>("plugin:apple-intelligence|generate", { prompt })`.
 4. `const tags = await invoke<string[]>("apply_generated_tags", { wordId, raw })`.
 5. Если `tags.length > 0` → `setSavedWords(... { ...word, tags })`;
    `savedWordsMutatedRef.current = true`.
@@ -210,9 +222,9 @@ parse_theme_tags(raw: &str) -> Vec<String>
 - Каскадное удаление при удалении слова — уже покрыто, регрессий не вводим.
 
 Живой инференс не тестируем (гейтится железом: macOS 26 + Apple Silicon + Apple
-Intelligence). В тестах фронта `generate` мокается.
+Intelligence). В тестах фронта команды плагина мокаются через тот же `invoke`-мок.
 
-Фронт (React Testing Library, мок `invoke` и мок модуля плагина):
+Фронт (React Testing Library, мок `invoke`):
 - При первом сохранении слова и `availability().available === true` вызываются
   `build_word_tag_prompt` → `generate` → `apply_generated_tags`; по возврату
   непустого списка чипы появляются на карточке.
@@ -220,10 +232,10 @@ Intelligence). В тестах фронта `generate` мокается.
 - `apply_generated_tags` вернул пусто → индикатор гаснет, теги не добавлены,
   ошибки нет.
 - `build_word_tag_prompt` вернул `null` → `generate` не вызывается.
-- `availability().available === false` → ни одного из трёх вызовов, нет
+- availability вернул `{ available: false }` → ни одного из трёх вызовов, нет
   индикатора и мерцания; ручные теги работают.
 - Повторное сохранение того же слова **не** запускает генерацию.
-- Ошибка `generate` → проглатывается, ошибки в панели нет, индикатор гаснет.
+- Ошибка generate-invoke → проглатывается, ошибки в панели нет, индикатор гаснет.
 - Авто-тег участвует в фильтре и снимается крестиком (переиспользует тесты
   тег-механики).
 
@@ -239,11 +251,9 @@ Intelligence). В тестах фронта `generate` мокается.
 - `src-tauri/capabilities/default.json` — permission плагина для JS-команд.
 
 Фронтенд:
-- `package.json` — зависимость `tauri-plugin-apple-intelligence-api`
-  (`github:jaytuduri/tauri-plugin-apple-intelligence`).
-- `src/lib/app/use-video-app.ts` — `wordTaggerAvailable` + ref, `availability()`
-  на маунте, `generatingTagWordIds`, `generateWordTags`, триггер после первого
-  сохранения, проброс в возвращаемый объект.
+- `src/lib/app/use-video-app.ts` — `wordTaggerAvailableRef`, availability-invoke
+  на маунте, `generatingTagWordIds`, `generateWordTags` (generate-invoke), триггер
+  после первого сохранения, проброс в возвращаемый объект.
 - `src/app/desktop-app.tsx`, `src/app/mobile-app.tsx` — проброс
   `generatingTagWordIds` в `SavedWordsPanel`.
 - `src/components/saved-words-panel.tsx` — индикатор «подбираю теги…» и
@@ -253,7 +263,9 @@ Intelligence). В тестах фронта `generate` мокается.
 
 - Точная строка permission плагина и git-ref/версия крейта сверяются по README
   плагина на момент реализации (early release, версия не закреплена).
-- `generate(prompt)` зовём без options — длину и формат задаём текстом промпта,
-  чтобы не зависеть от точного именования полей `GenerationOptions` в JS.
+- `generate` зовём без options — длину и формат задаём текстом промпта.
+- Обёртку `tauri-plugin-apple-intelligence-api` не используем (ломаный install
+  без собранного JS); зовём команды плагина напрямую через `invoke`. Если апстрим
+  начнёт публиковать собранный пакет, можно вернуться к нему без смены поведения.
 - Если модель вернёт тег на латинице/иностранном, он пройдёт валидацию и попадёт
   в набор; для MVP приемлемо (промпт просит русский, `first_meaning` якорит).

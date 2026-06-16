@@ -12,6 +12,29 @@
 
 ---
 
+## Amendment (during execution)
+
+The npm package `tauri-plugin-apple-intelligence-api` installs from GitHub without
+built JS (its `dist-js/*` entrypoints are absent), so it can't be imported. It is a
+thin wrapper over Tauri `invoke`, so we call the plugin commands directly via
+`@tauri-apps/api/core`:
+- availability: `invoke<{ available: boolean }>("plugin:apple-intelligence|availability")`
+- generate: `invoke<string>("plugin:apple-intelligence|generate", { prompt })`
+
+Consequences vs. the tasks as originally written below:
+- **Task 5 (`.d.ts`) is dropped** — no package import, no ambient types needed (the
+  file was created then removed).
+- **Task 6** reads availability via the `invoke` above (no dynamic import).
+- **Task 7** calls generate via the `invoke` above (no dynamic import); tests mock it
+  through the existing `mocks.invoke` with command `"plugin:apple-intelligence|generate"`.
+- **Task 8** tests likewise drive generate via `mocks.invoke`, not a separate module mock.
+- No `tauri-plugin-apple-intelligence-api` dependency in `package.json`.
+
+The Rust side is unchanged: the plugin still registers as `apple-intelligence`, so
+these command strings hit the same plugin commands on a real macOS 26 build.
+
+---
+
 ## Замечания по окружению
 
 - Rust-тесты: `cargo test --manifest-path src-tauri/Cargo.toml <filter>`.
