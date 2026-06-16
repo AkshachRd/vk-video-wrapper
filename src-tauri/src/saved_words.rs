@@ -513,6 +513,23 @@ pub fn remove_word_tag(
     remove_word_tag_in_state(&state, &word_id, &tag).map_err(String::from)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub fn build_word_tag_prompt(
+    state: tauri::State<'_, SavedWordsState>,
+    word_id: String,
+) -> Result<Option<String>, String> {
+    build_word_tag_prompt_in_state(&state, &word_id).map_err(String::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn apply_generated_tags(
+    state: tauri::State<'_, SavedWordsState>,
+    word_id: String,
+    raw: String,
+) -> Result<Vec<String>, String> {
+    apply_generated_tags_in_state(&state, &word_id, &raw, now_ms()).map_err(String::from)
+}
+
 fn find_saved_word(
     connection: &Connection,
     id: &str,

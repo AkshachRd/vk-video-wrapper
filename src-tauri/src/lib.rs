@@ -44,6 +44,8 @@ pub fn run() {
             saved_words::remove_saved_word,
             saved_words::add_word_tag,
             saved_words::remove_word_tag,
+            saved_words::build_word_tag_prompt,
+            saved_words::apply_generated_tags,
             recent_videos::list_recent_videos,
             recent_videos::record_recent_video,
             recent_videos::remove_recent_video
