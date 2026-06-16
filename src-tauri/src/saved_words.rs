@@ -321,6 +321,18 @@ pub fn add_word_tag_in_state(
     let normalized = normalize_tag(tag).ok_or(SavedWordsError::InvalidTag)?;
     let display = tag.trim();
 
+    let word_exists: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM saved_words WHERE id = ?1)",
+            params![word_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| SavedWordsError::Unavailable)?;
+
+    if !word_exists {
+        return Err(SavedWordsError::InvalidSavedWord);
+    }
+
     connection
         .execute(
             r#"
@@ -653,6 +665,15 @@ mod tests {
 
         assert_eq!(add_error, SavedWordsError::Unavailable);
         assert_eq!(remove_error, SavedWordsError::Unavailable);
+    }
+
+    #[test]
+    fn rejects_tag_on_missing_word() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+
+        let error = add_word_tag_in_state(&state, "de:ghost", "спорт", 1000).unwrap_err();
+
+        assert_eq!(error, SavedWordsError::InvalidSavedWord);
     }
 
     #[test]
