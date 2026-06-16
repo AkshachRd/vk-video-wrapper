@@ -81,8 +81,9 @@ tags: Vec<String>   // tag_display, порядок по created_at_ms ASC
 - `add_word_tag(wordId: String, tag: String) -> Result<Vec<String>, String>` —
   вставляет строку (idempotent через `ON CONFLICT(word_id, tag) DO NOTHING`),
   возвращает обновлённый список `tag_display` слова. Если слова с таким `word_id`
-  нет в `saved_words` — это не ошибка уровня команды, но фронт такие случаи не
-  порождает (тег ставится только на существующую карточку).
+  нет в `saved_words`, команда возвращает `invalid-saved-word` и ничего не пишет
+  (защита от orphan-строк по итогу код-ревью; фронт такие случаи и так не
+  порождает — тег ставится только на существующую карточку).
 - `remove_word_tag(wordId: String, tag: String) -> Result<Vec<String>, String>` —
   удаляет строку по `(word_id, normalize(tag))`, возвращает обновлённый список
   тегов слова.
