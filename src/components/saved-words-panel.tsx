@@ -18,6 +18,7 @@ type SavedWordsPanelProps = {
   onToggleTagFilter?: (key: string) => void;
   onResetTagFilter?: () => void;
   tagPendingWordIds?: string[];
+  generatingTagWordIds?: string[];
   onAddTag?: (wordId: string, tag: string) => void;
   onRemoveTag?: (wordId: string, tag: string) => void;
 };
@@ -34,11 +35,13 @@ export function SavedWordsPanel({
   onToggleTagFilter,
   onResetTagFilter,
   tagPendingWordIds = [],
+  generatingTagWordIds = [],
   onAddTag,
   onRemoveTag,
 }: SavedWordsPanelProps) {
   const pendingWordIdSet = new Set(pendingWordIds);
   const tagPendingWordIdSet = new Set(tagPendingWordIds);
+  const generatingTagWordIdSet = new Set(generatingTagWordIds);
 
   const tagsEnabled = !isUnavailable && Boolean(onAddTag && onRemoveTag);
   const tagOptions = tagsEnabled ? collectTagOptions(words) : [];
@@ -115,14 +118,21 @@ export function SavedWordsPanel({
                 {word.firstMeaning || "без значения"}
               </div>
               {tagsEnabled && onAddTag && onRemoveTag ? (
-                <WordTagEditor
-                  wordId={word.id}
-                  tags={word.tags}
-                  suggestions={suggestions}
-                  disabled={tagPendingWordIdSet.has(word.id)}
-                  onAddTag={onAddTag}
-                  onRemoveTag={onRemoveTag}
-                />
+                <>
+                  <WordTagEditor
+                    wordId={word.id}
+                    tags={word.tags}
+                    suggestions={suggestions}
+                    disabled={tagPendingWordIdSet.has(word.id) || generatingTagWordIdSet.has(word.id)}
+                    onAddTag={onAddTag}
+                    onRemoveTag={onRemoveTag}
+                  />
+                  {generatingTagWordIdSet.has(word.id) ? (
+                    <div className="mt-1.5 font-mono text-[10px] tracking-[0.04em] text-ink-3">
+                      подбираю теги…
+                    </div>
+                  ) : null}
+                </>
               ) : null}
               <button
                 type="button"

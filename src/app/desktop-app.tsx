@@ -359,6 +359,7 @@ export function DesktopApp({ app }: { app: VideoApp }) {
                 onToggleTagFilter={app.handleToggleTagFilter}
                 onResetTagFilter={app.handleResetTagFilter}
                 tagPendingWordIds={app.tagPendingWordIds}
+                generatingTagWordIds={app.generatingTagWordIds}
                 onAddTag={app.handleAddWordTag}
                 onRemoveTag={app.handleRemoveWordTag}
               />

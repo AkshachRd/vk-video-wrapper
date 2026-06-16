@@ -1828,6 +1828,54 @@ describe("App", () => {
     expect(mocks.invoke).not.toHaveBeenCalledWith("build_word_tag_prompt", expect.anything());
     expect(mocks.invoke).not.toHaveBeenCalledWith("plugin:apple-intelligence|generate", expect.anything());
   });
+
+  it("shows a pending hint while theme tags are being generated", async () => {
+    const user = userEvent.setup();
+    let resolveGenerate: (value: string) => void = () => {};
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      if (command === "record_recent_video") return Promise.resolve(null);
+      if (command === "plugin:apple-intelligence|availability") return Promise.resolve({ available: true });
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+      if (command === "lookup_word") {
+        return Promise.resolve(wordLookup({ query: "Welt", headword: "Welt", meanings: ["мир"] }));
+      }
+      if (command === "save_word") {
+        return Promise.resolve({
+          id: "de:welt", normalizedWord: "welt", displayWord: "Welt", language: "de",
+          languageName: "Немецкий", firstMeaning: "мир", source: "ruwiktionary-kaikki",
+          sourceUrl: null, createdAtMs: 1000, updatedAtMs: 1000, tags: [],
+        });
+      }
+      if (command === "build_word_tag_prompt") return Promise.resolve("PROMPT");
+      if (command === "plugin:apple-intelligence|generate") {
+        return new Promise<string>((resolve) => { resolveGenerate = resolve; });
+      }
+      if (command === "apply_generated_tags") return Promise.resolve(["город"]);
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Welt" }));
+    await screen.findByText("мир");
+    await user.click(screen.getByRole("button", { name: "Сохранить слово" }));
+
+    expect(await screen.findByText("подбираю теги…")).toBeInTheDocument();
+    resolveGenerate('["город"]');
+    await waitFor(() => expect(screen.queryByText("подбираю теги…")).not.toBeInTheDocument());
+  });
 });
 
 // ── new "App second subtitle line" suite ──────────────────────────────────
