@@ -1679,6 +1679,48 @@ describe("App", () => {
       expect(screen.queryByText("B1")).not.toBeInTheDocument();
     });
   });
+
+  it("rolls back an optimistic tag removal when the backend fails", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return Promise.resolve([
+          {
+            id: "de:welt",
+            normalizedWord: "welt",
+            displayWord: "Welt",
+            language: "de",
+            languageName: "Немецкий",
+            firstMeaning: "мир",
+            source: "ruwiktionary-kaikki",
+            sourceUrl: null,
+            createdAtMs: 1000,
+            updatedAtMs: 1000,
+            tags: ["дом"],
+          },
+        ]);
+      }
+      if (command === "load_video_from_url") {
+        return Promise.resolve(loadedVideo());
+      }
+      if (command === "remove_word_tag") {
+        return Promise.reject(new Error("boom"));
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
+
+    await screen.findByText("Welt");
+    await user.click(screen.getByRole("button", { name: "Снять тег дом" }));
+
+    await waitFor(() => {
+      expect(mocks.invoke).toHaveBeenCalledWith("remove_word_tag", { wordId: "de:welt", tag: "дом" });
+    });
+    expect(await screen.findByRole("button", { name: "Снять тег дом" })).toBeInTheDocument();
+  });
 });
 
 // ── new "App second subtitle line" suite ──────────────────────────────────

@@ -58,12 +58,12 @@ export function SavedWordsPanel({
       <div className="flex items-center justify-between gap-3 px-[18px] pt-[18px] pb-3.5">
         <h2 className="text-base font-semibold tracking-[-0.01em] text-ink">Слова</h2>
         <div className="flex items-center gap-1.5">
-          {isFiltered ? (
-            <span className="font-mono text-[10px] text-ink-3">из {String(words.length).padStart(2, "0")}</span>
-          ) : null}
           <span className="min-w-6 rounded-full bg-ink px-[9px] py-0.5 text-center font-mono text-xs font-medium text-paper">
             {String(visibleWords.length).padStart(2, "0")}
           </span>
+          {isFiltered ? (
+            <span className="font-mono text-[10px] text-ink-3">из {String(words.length).padStart(2, "0")}</span>
+          ) : null}
         </div>
       </div>
 
