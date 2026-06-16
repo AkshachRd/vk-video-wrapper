@@ -1,5 +1,8 @@
 import { X } from "lucide-react";
 
+import { TagFilterBar } from "@/components/tag-filter-bar";
+import { WordTagEditor } from "@/components/word-tag-editor";
+import { collectTagOptions, wordMatchesSelectedTags } from "@/lib/saved-words/tags";
 import type { SavedWord } from "@/lib/saved-words/types";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +14,12 @@ type SavedWordsSheetContentProps = {
   isLoading?: boolean;
   isUnavailable?: boolean;
   onRemove: (word: SavedWord) => void;
+  selectedTagKeys?: string[];
+  onToggleTagFilter?: (key: string) => void;
+  onResetTagFilter?: () => void;
+  tagPendingWordIds?: string[];
+  onAddTag?: (wordId: string, tag: string) => void;
+  onRemoveTag?: (wordId: string, tag: string) => void;
 };
 
 // Содержимое шторки/панели сохранённых слов (mobile.css .m-sw-*).
@@ -22,17 +31,47 @@ export function SavedWordsSheetContent({
   isLoading,
   isUnavailable,
   onRemove,
+  selectedTagKeys = [],
+  onToggleTagFilter,
+  onResetTagFilter,
+  tagPendingWordIds = [],
+  onAddTag,
+  onRemoveTag,
 }: SavedWordsSheetContentProps) {
   const pendingWordIdSet = new Set(pendingWordIds);
+  const tagPendingWordIdSet = new Set(tagPendingWordIds);
+
+  const tagsEnabled = !isUnavailable && Boolean(onAddTag && onRemoveTag);
+  const tagOptions = tagsEnabled ? collectTagOptions(words) : [];
+  const suggestions = tagOptions.map((option) => option.display);
+
+  const visibleWords = tagsEnabled
+    ? words.filter((word) => wordMatchesSelectedTags(word, selectedTagKeys))
+    : words;
+  const isFiltered = tagsEnabled && selectedTagKeys.length > 0;
 
   return (
     <div>
       <div className="flex items-center justify-between px-[22px] pt-2 pb-3.5">
         <h3 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Слова</h3>
-        <span className="rounded-full bg-ink px-2.5 py-0.5 font-mono text-[13px] font-semibold text-paper">
-          {String(words.length).padStart(2, "0")}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-ink px-2.5 py-0.5 font-mono text-[13px] font-semibold text-paper">
+            {String(visibleWords.length).padStart(2, "0")}
+          </span>
+          {isFiltered ? (
+            <span className="font-mono text-[11px] text-ink-3">из {String(words.length).padStart(2, "0")}</span>
+          ) : null}
+        </div>
       </div>
+
+      {tagsEnabled && tagOptions.length > 0 ? (
+        <TagFilterBar
+          options={tagOptions}
+          selectedKeys={selectedTagKeys}
+          onToggle={onToggleTagFilter ?? (() => {})}
+          onReset={onResetTagFilter ?? (() => {})}
+        />
+      ) : null}
 
       {error && !isUnavailable ? <div className="px-[22px] pb-3 text-xs text-ink-2">{error}</div> : null}
 
@@ -48,9 +87,13 @@ export function SavedWordsSheetContent({
           <br />
           чтобы сохранить его сюда.
         </div>
+      ) : visibleWords.length === 0 ? (
+        <div className="px-6 py-[50px] text-center text-sm leading-[1.7] text-ink-3">
+          Нет слов с выбранными тегами
+        </div>
       ) : (
         <div className="flex flex-col gap-2.5 px-4 pb-2">
-          {words.map((word) => (
+          {visibleWords.map((word) => (
             <div
               key={word.id}
               data-fresh={word.id === freshWordId ? "true" : undefined}
@@ -70,6 +113,16 @@ export function SavedWordsSheetContent({
               <div className="mt-1.5 text-sm leading-[1.4] break-words text-ink-2">
                 {word.firstMeaning || "без значения"}
               </div>
+              {tagsEnabled && onAddTag && onRemoveTag ? (
+                <WordTagEditor
+                  wordId={word.id}
+                  tags={word.tags}
+                  suggestions={suggestions}
+                  disabled={tagPendingWordIdSet.has(word.id)}
+                  onAddTag={onAddTag}
+                  onRemoveTag={onRemoveTag}
+                />
+              ) : null}
               <button
                 type="button"
                 aria-label={`Удалить ${word.displayWord}`}

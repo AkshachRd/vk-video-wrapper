@@ -163,6 +163,12 @@ export function MobileApp({ app }: { app: VideoApp }) {
             isLoading={app.areSavedWordsLoading}
             isUnavailable={app.savedWordsUnavailable}
             onRemove={app.handleRemoveSavedWord}
+            selectedTagKeys={app.selectedTagKeys}
+            onToggleTagFilter={app.handleToggleTagFilter}
+            onResetTagFilter={app.handleResetTagFilter}
+            tagPendingWordIds={app.tagPendingWordIds}
+            onAddTag={app.handleAddWordTag}
+            onRemoveTag={app.handleRemoveWordTag}
           />
         </Shell>
       ) : null}

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { BottomSheet } from "./bottom-sheet";
@@ -120,6 +121,83 @@ describe("SavedWordsSheetContent", () => {
   it("shows the empty state", () => {
     render(<SavedWordsSheetContent words={[]} onRemove={() => {}} />);
     expect(screen.getByText(/Список пуст/)).toBeInTheDocument();
+  });
+
+  const tagged = (overrides: Partial<SavedWord>): SavedWord => ({ ...word, ...overrides });
+
+  it("filters words by a selected tag (OR)", () => {
+    render(
+      <SavedWordsSheetContent
+        words={[
+          tagged({ id: "de:haus", displayWord: "Haus", normalizedWord: "haus", tags: ["дом"] }),
+          tagged({ id: "de:welt", displayWord: "Welt", normalizedWord: "welt", tags: ["мир"] }),
+        ]}
+        selectedTagKeys={["дом"]}
+        onToggleTagFilter={vi.fn()}
+        onResetTagFilter={vi.fn()}
+        onAddTag={vi.fn()}
+        onRemoveTag={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Haus")).toBeInTheDocument();
+    expect(screen.queryByText("Welt")).not.toBeInTheDocument();
+  });
+
+  it("shows the visible-of-total counter when filtered", () => {
+    render(
+      <SavedWordsSheetContent
+        words={[
+          tagged({ id: "de:haus", displayWord: "Haus", normalizedWord: "haus", tags: ["дом"] }),
+          tagged({ id: "de:welt", displayWord: "Welt", normalizedWord: "welt", tags: ["мир"] }),
+        ]}
+        selectedTagKeys={["дом"]}
+        onToggleTagFilter={vi.fn()}
+        onResetTagFilter={vi.fn()}
+        onAddTag={vi.fn()}
+        onRemoveTag={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("из 02")).toBeInTheDocument();
+  });
+
+  it("adds a tag through the card editor", async () => {
+    const user = userEvent.setup();
+    const onAddTag = vi.fn();
+    render(
+      <SavedWordsSheetContent
+        words={[word]}
+        onAddTag={onAddTag}
+        onRemoveTag={vi.fn()}
+        onToggleTagFilter={vi.fn()}
+        onResetTagFilter={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Добавить тег" }));
+    await user.type(screen.getByLabelText("Новый тег"), "B1{Enter}");
+    expect(onAddTag).toHaveBeenCalledWith("s1", "B1");
+  });
+
+  it("shows an empty-filter message when nothing matches", () => {
+    render(
+      <SavedWordsSheetContent
+        words={[tagged({ id: "de:haus", tags: ["дом"] })]}
+        selectedTagKeys={["несуществующий"]}
+        onToggleTagFilter={vi.fn()}
+        onResetTagFilter={vi.fn()}
+        onAddTag={vi.fn()}
+        onRemoveTag={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Нет слов с выбранными тегами")).toBeInTheDocument();
+  });
+
+  it("hides tag controls when unavailable", () => {
+    render(<SavedWordsSheetContent words={[tagged({ tags: ["дом"] })]} isUnavailable onRemove={vi.fn()} />);
+    expect(screen.queryByLabelText("Фильтр по тегам")).not.toBeInTheDocument();
   });
 });
 
