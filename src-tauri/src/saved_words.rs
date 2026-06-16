@@ -386,6 +386,37 @@ pub fn add_word_tag_in_state(
     list_word_tags_in(&connection, word_id)
 }
 
+fn build_prompt(word: &SavedWord) -> String {
+    let meaning = word.first_meaning.as_deref().unwrap_or("");
+    let language = word
+        .language_name
+        .as_deref()
+        .unwrap_or(word.language.as_str());
+
+    format!(
+        "Определи 1–2 тематические категории (тему/домен) для слова, чтобы \
+         сгруппировать его в личном словаре. Слово ({language}): \"{}\". \
+         Значение: \"{meaning}\". Ответь ТОЛЬКО JSON-массивом строк на русском \
+         языке, нижним регистром, каждая категория — одно-два слова, без \
+         пояснений. Пример: [\"еда\", \"кухня\"].",
+        word.display_word
+    )
+}
+
+pub fn build_word_tag_prompt_in_state(
+    state: &SavedWordsState,
+    word_id: &str,
+) -> Result<Option<String>, SavedWordsError> {
+    let connection = state.connection()?;
+    let word = find_saved_word(&connection, word_id)?.ok_or(SavedWordsError::InvalidSavedWord)?;
+
+    if word.tags.is_empty() {
+        Ok(Some(build_prompt(&word)))
+    } else {
+        Ok(None)
+    }
+}
+
 pub fn remove_word_tag_in_state(
     state: &SavedWordsState,
     word_id: &str,
@@ -782,5 +813,48 @@ mod tests {
     #[test]
     fn parse_theme_tags_returns_empty_for_blank_input() {
         assert_eq!(parse_theme_tags(""), Vec::<String>::new());
+    }
+
+    #[test]
+    fn build_prompt_mentions_word_and_meaning() {
+        let word = save_word_in_state(
+            &SavedWordsState::in_memory_for_tests().unwrap(),
+            request("Haus", "de"),
+            1000,
+        )
+        .unwrap();
+        let prompt = build_prompt(&word);
+        assert!(prompt.contains("Haus"));
+        assert!(prompt.contains("мир"));
+    }
+
+    #[test]
+    fn build_word_tag_prompt_returns_none_for_word_with_tags() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+        add_word_tag_in_state(&state, "de:haus", "дом", 2000).unwrap();
+
+        let prompt = build_word_tag_prompt_in_state(&state, "de:haus").unwrap();
+
+        assert_eq!(prompt, None);
+    }
+
+    #[test]
+    fn build_word_tag_prompt_returns_some_for_fresh_word() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+
+        let prompt = build_word_tag_prompt_in_state(&state, "de:haus").unwrap();
+
+        assert!(prompt.unwrap().contains("Haus"));
+    }
+
+    #[test]
+    fn build_word_tag_prompt_rejects_missing_word() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+
+        let error = build_word_tag_prompt_in_state(&state, "de:ghost").unwrap_err();
+
+        assert_eq!(error, SavedWordsError::InvalidSavedWord);
     }
 }
