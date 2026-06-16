@@ -18,6 +18,7 @@ function savedWord(overrides: Partial<SavedWord> = {}): SavedWord {
     sourceUrl: "https://kaikki.org/example",
     createdAtMs: 1000,
     updatedAtMs: 1000,
+    tags: [],
     ...overrides,
   };
 }
@@ -64,5 +65,70 @@ describe("SavedWordsPanel", () => {
     render(<SavedWordsPanel words={[savedWord()]} onRemove={vi.fn()} />);
 
     expect(screen.getByText("Welt").closest("[data-fresh='true']")).toBeNull();
+  });
+
+  it("filters words by selected tag (OR)", () => {
+    const haus = savedWord({ id: "de:haus", displayWord: "Haus", normalizedWord: "haus", tags: ["дом"] });
+    const welt = savedWord({ id: "de:welt", displayWord: "Welt", normalizedWord: "welt", tags: ["мир"] });
+
+    render(
+      <SavedWordsPanel
+        words={[haus, welt]}
+        selectedTagKeys={["дом"]}
+        onToggleTagFilter={vi.fn()}
+        onResetTagFilter={vi.fn()}
+        onAddTag={vi.fn()}
+        onRemoveTag={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Haus")).toBeInTheDocument();
+    expect(screen.queryByText("Welt")).not.toBeInTheDocument();
+  });
+
+  it("shows the visible-of-total counter when filtered", () => {
+    const haus = savedWord({ id: "de:haus", displayWord: "Haus", normalizedWord: "haus", tags: ["дом"] });
+    const welt = savedWord({ id: "de:welt", displayWord: "Welt", normalizedWord: "welt", tags: ["мир"] });
+
+    render(
+      <SavedWordsPanel
+        words={[haus, welt]}
+        selectedTagKeys={["дом"]}
+        onToggleTagFilter={vi.fn()}
+        onResetTagFilter={vi.fn()}
+        onAddTag={vi.fn()}
+        onRemoveTag={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("из 02")).toBeInTheDocument();
+  });
+
+  it("shows an empty-filter message when nothing matches", () => {
+    const haus = savedWord({ id: "de:haus", tags: ["дом"] });
+
+    render(
+      <SavedWordsPanel
+        words={[haus]}
+        selectedTagKeys={["несуществующий"]}
+        onToggleTagFilter={vi.fn()}
+        onResetTagFilter={vi.fn()}
+        onAddTag={vi.fn()}
+        onRemoveTag={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Нет слов с выбранными тегами")).toBeInTheDocument();
+  });
+
+  it("hides tag controls when the store is unavailable", () => {
+    const haus = savedWord({ tags: ["дом"] });
+
+    render(<SavedWordsPanel words={[haus]} isUnavailable onRemove={vi.fn()} />);
+
+    expect(screen.queryByLabelText("Фильтр по тегам")).not.toBeInTheDocument();
   });
 });

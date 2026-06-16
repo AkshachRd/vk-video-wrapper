@@ -1,5 +1,8 @@
 import { X } from "lucide-react";
 
+import { TagFilterBar } from "@/components/tag-filter-bar";
+import { WordTagEditor } from "@/components/word-tag-editor";
+import { collectTagOptions, wordMatchesSelectedTags } from "@/lib/saved-words/tags";
 import type { SavedWord } from "@/lib/saved-words/types";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +14,12 @@ type SavedWordsPanelProps = {
   freshWordId?: string;
   error?: string;
   onRemove: (word: SavedWord) => void;
+  selectedTagKeys?: string[];
+  onToggleTagFilter?: (key: string) => void;
+  onResetTagFilter?: () => void;
+  tagPendingWordIds?: string[];
+  onAddTag?: (wordId: string, tag: string) => void;
+  onRemoveTag?: (wordId: string, tag: string) => void;
 };
 
 export function SavedWordsPanel({
@@ -21,8 +30,24 @@ export function SavedWordsPanel({
   freshWordId,
   error,
   onRemove,
+  selectedTagKeys = [],
+  onToggleTagFilter,
+  onResetTagFilter,
+  tagPendingWordIds = [],
+  onAddTag,
+  onRemoveTag,
 }: SavedWordsPanelProps) {
   const pendingWordIdSet = new Set(pendingWordIds);
+  const tagPendingWordIdSet = new Set(tagPendingWordIds);
+
+  const tagsEnabled = !isUnavailable && Boolean(onAddTag && onRemoveTag);
+  const tagOptions = tagsEnabled ? collectTagOptions(words) : [];
+  const suggestions = tagOptions.map((option) => option.display);
+
+  const visibleWords = tagsEnabled
+    ? words.filter((word) => wordMatchesSelectedTags(word, selectedTagKeys))
+    : words;
+  const isFiltered = tagsEnabled && selectedTagKeys.length > 0;
 
   return (
     <aside
@@ -32,10 +57,24 @@ export function SavedWordsPanel({
     >
       <div className="flex items-center justify-between gap-3 px-[18px] pt-[18px] pb-3.5">
         <h2 className="text-base font-semibold tracking-[-0.01em] text-ink">Слова</h2>
-        <span className="min-w-6 rounded-full bg-ink px-[9px] py-0.5 text-center font-mono text-xs font-medium text-paper">
-          {String(words.length).padStart(2, "0")}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {isFiltered ? (
+            <span className="font-mono text-[10px] text-ink-3">из {String(words.length).padStart(2, "0")}</span>
+          ) : null}
+          <span className="min-w-6 rounded-full bg-ink px-[9px] py-0.5 text-center font-mono text-xs font-medium text-paper">
+            {String(visibleWords.length).padStart(2, "0")}
+          </span>
+        </div>
       </div>
+
+      {tagsEnabled && tagOptions.length > 0 ? (
+        <TagFilterBar
+          options={tagOptions}
+          selectedKeys={selectedTagKeys}
+          onToggle={onToggleTagFilter ?? (() => {})}
+          onReset={onResetTagFilter ?? (() => {})}
+        />
+      ) : null}
 
       {error && !isUnavailable ? <div className="px-[18px] pb-3 text-xs text-ink-2">{error}</div> : null}
       {isUnavailable ? <div className="px-[18px] pb-[18px] text-sm text-ink-3">Список слов недоступен</div> : null}
@@ -47,10 +86,15 @@ export function SavedWordsPanel({
           Сохраненных слов пока нет
         </div>
       ) : null}
+      {!isUnavailable && !isLoading && words.length > 0 && visibleWords.length === 0 ? (
+        <div className="px-[18px] pt-5 pb-10 text-center text-[13px] leading-[1.7] text-ink-3">
+          Нет слов с выбранными тегами
+        </div>
+      ) : null}
 
-      {!isUnavailable && words.length > 0 ? (
+      {!isUnavailable && visibleWords.length > 0 ? (
         <div className="flex flex-col gap-2 px-3 pt-1 pb-3">
-          {words.map((word) => (
+          {visibleWords.map((word) => (
             <div
               key={word.id}
               data-fresh={word.id === freshWordId ? "true" : undefined}
@@ -70,6 +114,16 @@ export function SavedWordsPanel({
               <div className="mt-[5px] text-[13px] leading-[1.4] break-words text-ink-2">
                 {word.firstMeaning || "без значения"}
               </div>
+              {tagsEnabled && onAddTag && onRemoveTag ? (
+                <WordTagEditor
+                  wordId={word.id}
+                  tags={word.tags}
+                  suggestions={suggestions}
+                  disabled={tagPendingWordIdSet.has(word.id)}
+                  onAddTag={onAddTag}
+                  onRemoveTag={onRemoveTag}
+                />
+              ) : null}
               <button
                 type="button"
                 aria-label={`Удалить ${word.displayWord}`}
