@@ -336,6 +336,7 @@ describe("App", () => {
             sourceUrl: null,
             createdAtMs: 1000,
             updatedAtMs: 1000,
+            tags: [],
           },
         ]);
       }
@@ -409,6 +410,7 @@ describe("App", () => {
             sourceUrl: null,
             createdAtMs: 1000,
             updatedAtMs: 1000,
+            tags: [],
           },
         ]);
       }
@@ -455,6 +457,7 @@ describe("App", () => {
             sourceUrl: null,
             createdAtMs: 1000,
             updatedAtMs: 1000,
+            tags: [],
           },
         ]);
       }
@@ -520,6 +523,7 @@ describe("App", () => {
           sourceUrl: null,
           createdAtMs: 1000,
           updatedAtMs: 1000,
+          tags: [],
         });
       }
       return Promise.reject(new Error(`unexpected command: ${command}`));
@@ -586,6 +590,7 @@ describe("App", () => {
           sourceUrl: null,
           createdAtMs: 1000,
           updatedAtMs: 1000,
+          tags: [],
         });
       }
       return Promise.reject(new Error(`unexpected command: ${command}`));
@@ -627,6 +632,7 @@ describe("App", () => {
             sourceUrl: null,
             createdAtMs: 1000,
             updatedAtMs: 1000,
+            tags: [],
           },
         ]);
       }
@@ -1249,6 +1255,7 @@ describe("App", () => {
           sourceUrl: null,
           createdAtMs: 1000,
           updatedAtMs: 1000,
+          tags: [],
         });
       }
 
@@ -1583,6 +1590,94 @@ describe("App", () => {
     expect(await screen.findByText("Не удалось разобрать субтитры этой дорожки.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hello" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Субтитры" })).toHaveValue("ru_0_ru.vtt");
+  });
+
+  it("adds a tag to a saved word and persists it through the backend", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return Promise.resolve([
+          {
+            id: "de:welt",
+            normalizedWord: "welt",
+            displayWord: "Welt",
+            language: "de",
+            languageName: "Немецкий",
+            firstMeaning: "мир",
+            source: "ruwiktionary-kaikki",
+            sourceUrl: null,
+            createdAtMs: 1000,
+            updatedAtMs: 1000,
+            tags: [],
+          },
+        ]);
+      }
+      if (command === "load_video_from_url") {
+        return Promise.resolve(loadedVideo());
+      }
+      if (command === "add_word_tag") {
+        return Promise.resolve(["B1"]);
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
+
+    await screen.findByText("Welt");
+    await user.click(screen.getByRole("button", { name: "Добавить тег" }));
+    await user.type(screen.getByLabelText("Новый тег"), "B1{Enter}");
+
+    await waitFor(() => {
+      expect(mocks.invoke).toHaveBeenCalledWith("add_word_tag", { wordId: "de:welt", tag: "B1" });
+    });
+    expect((await screen.findAllByText("B1")).length).toBeGreaterThan(0);
+  });
+
+  it("rolls back an optimistic tag when the backend fails", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") {
+        return Promise.resolve([
+          {
+            id: "de:welt",
+            normalizedWord: "welt",
+            displayWord: "Welt",
+            language: "de",
+            languageName: "Немецкий",
+            firstMeaning: "мир",
+            source: "ruwiktionary-kaikki",
+            sourceUrl: null,
+            createdAtMs: 1000,
+            updatedAtMs: 1000,
+            tags: [],
+          },
+        ]);
+      }
+      if (command === "load_video_from_url") {
+        return Promise.resolve(loadedVideo());
+      }
+      if (command === "add_word_tag") {
+        return Promise.reject(new Error("boom"));
+      }
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
+
+    await screen.findByText("Welt");
+    await user.click(screen.getByRole("button", { name: "Добавить тег" }));
+    await user.type(screen.getByLabelText("Новый тег"), "B1{Enter}");
+
+    await waitFor(() => {
+      expect(mocks.invoke).toHaveBeenCalledWith("add_word_tag", { wordId: "de:welt", tag: "B1" });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("B1")).not.toBeInTheDocument();
+    });
   });
 });
 
