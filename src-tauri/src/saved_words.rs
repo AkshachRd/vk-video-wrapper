@@ -138,6 +138,45 @@ fn normalize_tag(value: &str) -> Option<String> {
     }
 }
 
+fn parse_json_array(raw: &str) -> Option<Vec<String>> {
+    let start = raw.find('[')?;
+    let end = raw.rfind(']')?;
+    if end <= start {
+        return None;
+    }
+    serde_json::from_str::<Vec<String>>(&raw[start..=end]).ok()
+}
+
+fn parse_theme_tags(raw: &str) -> Vec<String> {
+    let trimmed = raw.trim();
+
+    let candidates: Vec<String> = match parse_json_array(trimmed) {
+        Some(values) => values,
+        None => trimmed
+            .trim_start_matches(['[', '{'])
+            .trim_end_matches([']', '}'])
+            .split(['\n', ','])
+            .map(|piece| piece.trim().trim_matches('"').to_string())
+            .collect(),
+    };
+
+    let mut out: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for candidate in candidates {
+        if let Some(normalized) = normalize_tag(&candidate) {
+            if seen.insert(normalized.clone()) {
+                out.push(normalized);
+                if out.len() == 2 {
+                    break;
+                }
+            }
+        }
+    }
+
+    out
+}
+
 fn normalize_word(value: &str) -> Option<String> {
     let normalized = value.trim().to_lowercase();
 
@@ -694,5 +733,44 @@ mod tests {
             .unwrap();
 
         assert_eq!(table_name, "word_tags");
+    }
+
+    #[test]
+    fn parse_theme_tags_reads_json_array_lowercased() {
+        assert_eq!(parse_theme_tags(r#"["Еда","СПОРТ"]"#), vec!["еда", "спорт"]);
+    }
+
+    #[test]
+    fn parse_theme_tags_extracts_json_embedded_in_text() {
+        let raw = "Вот категории: [ \"Еда\", \"кухня\" ] — готово";
+        assert_eq!(parse_theme_tags(raw), vec!["еда", "кухня"]);
+    }
+
+    #[test]
+    fn parse_theme_tags_falls_back_to_comma_split() {
+        assert_eq!(parse_theme_tags("Еда, спорт"), vec!["еда", "спорт"]);
+    }
+
+    #[test]
+    fn parse_theme_tags_drops_empty_and_punctuation_and_dedups() {
+        assert_eq!(
+            parse_theme_tags(r#"["", "...", "Еда", "еда"]"#),
+            vec!["еда"]
+        );
+    }
+
+    #[test]
+    fn parse_theme_tags_caps_at_two() {
+        assert_eq!(
+            parse_theme_tags(r#"["еда","спорт","право"]"#),
+            vec!["еда", "спорт"]
+        );
+    }
+
+    #[test]
+    fn parse_theme_tags_drops_too_long() {
+        let long = "а".repeat(41);
+        let raw = format!(r#"["{long}", "еда"]"#);
+        assert_eq!(parse_theme_tags(&raw), vec!["еда"]);
     }
 }
