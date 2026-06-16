@@ -419,19 +419,23 @@ pub fn apply_generated_tags_in_state(
     list_word_tags_in(&connection, word_id)
 }
 
-fn build_prompt(word: &SavedWord) -> String {
-    let meaning = word.first_meaning.as_deref().unwrap_or("");
-    let language = word
-        .language_name
-        .as_deref()
-        .unwrap_or(word.language.as_str());
+/// Язык тегов = язык слова. Apple Foundation Models не поддерживает русский, поэтому
+/// промпт пишем по-английски и просим теги на языке слова (en/de — модель их умеет).
+/// Возвращает None для языков, которые модель не тянет (в т.ч. ru).
+fn model_language_name(code: &str) -> Option<&'static str> {
+    match code {
+        "en" => Some("English"),
+        "de" => Some("German"),
+        _ => None,
+    }
+}
 
+fn build_prompt(word: &SavedWord, language_name: &str) -> String {
     format!(
-        "Определи 1–2 тематические категории (тему/домен) для слова, чтобы \
-         сгруппировать его в личном словаре. Слово ({language}): \"{}\". \
-         Значение: \"{meaning}\". Ответь ТОЛЬКО JSON-массивом строк на русском \
-         языке, нижним регистром, каждая категория — одно-два слова, без \
-         пояснений. Пример: [\"еда\", \"кухня\"].",
+        "Assign 1-2 broad topic categories (theme/domain) to the following \
+         {language_name} word, to group it in a personal vocabulary. Word: \"{}\". \
+         Reply with ONLY a JSON array of 1-2 short lowercase {language_name} words, \
+         no explanations. Example: [\"food\", \"kitchen\"].",
         word.display_word
     )
 }
@@ -443,10 +447,15 @@ pub fn build_word_tag_prompt_in_state(
     let connection = state.connection()?;
     let word = find_saved_word(&connection, word_id)?.ok_or(SavedWordsError::InvalidSavedWord)?;
 
-    if word.tags.is_empty() {
-        Ok(Some(build_prompt(&word)))
-    } else {
-        Ok(None)
+    // Уже есть теги — не перегенерируем.
+    if !word.tags.is_empty() {
+        return Ok(None);
+    }
+
+    // Язык не поддерживается моделью (например ru) — авто-теги пропускаем.
+    match model_language_name(&word.language) {
+        Some(language_name) => Ok(Some(build_prompt(&word, language_name))),
+        None => Ok(None),
     }
 }
 
@@ -866,16 +875,29 @@ mod tests {
     }
 
     #[test]
-    fn build_prompt_mentions_word_and_meaning() {
+    fn build_prompt_is_english_and_targets_word_language() {
         let word = save_word_in_state(
             &SavedWordsState::in_memory_for_tests().unwrap(),
             request("Haus", "de"),
             1000,
         )
         .unwrap();
-        let prompt = build_prompt(&word);
+        let prompt = build_prompt(&word, "German");
         assert!(prompt.contains("Haus"));
-        assert!(prompt.contains("мир"));
+        assert!(prompt.contains("German"));
+        // Промпт не должен содержать русского (модель его не поддерживает).
+        assert!(!prompt.contains("мир"));
+        assert!(!prompt.contains("Определи"));
+    }
+
+    #[test]
+    fn build_word_tag_prompt_skips_unsupported_language() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("мир", "ru"), 1000).unwrap();
+
+        let prompt = build_word_tag_prompt_in_state(&state, "ru:мир").unwrap();
+
+        assert_eq!(prompt, None);
     }
 
     #[test]
