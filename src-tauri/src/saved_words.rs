@@ -41,6 +41,7 @@ pub struct SavedWord {
     pub source_url: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -185,11 +186,15 @@ pub fn list_saved_words_in_state(
         )
         .map_err(|_| SavedWordsError::Unavailable)?;
 
-    let words = statement
+    let mut words = statement
         .query_map([], row_to_saved_word)
         .map_err(|_| SavedWordsError::Unavailable)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| SavedWordsError::Unavailable)?;
+
+    for word in &mut words {
+        word.tags = list_word_tags_in(&connection, &word.id)?;
+    }
 
     Ok(words)
 }
@@ -257,6 +262,17 @@ pub fn remove_saved_word_in_state(
     let normalized_word =
         normalize_word(normalized_word).ok_or(SavedWordsError::InvalidSavedWord)?;
     let language = normalize_language(language);
+    let id = saved_word_id(&language, &normalized_word);
+
+    connection
+        .execute(
+            r#"
+            DELETE FROM word_tags
+            WHERE word_id = ?1
+            "#,
+            params![id],
+        )
+        .map_err(|_| SavedWordsError::Unavailable)?;
 
     connection
         .execute(
@@ -368,7 +384,7 @@ fn find_saved_word(
     connection: &Connection,
     id: &str,
 ) -> Result<Option<SavedWord>, SavedWordsError> {
-    connection
+    let word = connection
         .query_row(
             r#"
             SELECT
@@ -389,7 +405,15 @@ fn find_saved_word(
             row_to_saved_word,
         )
         .optional()
-        .map_err(|_| SavedWordsError::Unavailable)
+        .map_err(|_| SavedWordsError::Unavailable)?;
+
+    match word {
+        Some(mut word) => {
+            word.tags = list_word_tags_in(connection, id)?;
+            Ok(Some(word))
+        }
+        None => Ok(None),
+    }
 }
 
 fn row_to_saved_word(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedWord> {
@@ -404,6 +428,7 @@ fn row_to_saved_word(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedWord> {
         source_url: row.get(7)?,
         created_at_ms: row.get(8)?,
         updated_at_ms: row.get(9)?,
+        tags: Vec::new(),
     })
 }
 
@@ -513,6 +538,32 @@ mod tests {
             .unwrap();
 
         assert_eq!(table_name, "saved_words");
+    }
+
+    #[test]
+    fn list_includes_tags_in_insertion_order() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+        add_word_tag_in_state(&state, "de:haus", "существительные", 2000).unwrap();
+        add_word_tag_in_state(&state, "de:haus", "B1", 3000).unwrap();
+
+        let words = list_saved_words_in_state(&state).unwrap();
+
+        assert_eq!(
+            words[0].tags,
+            vec!["существительные".to_string(), "B1".to_string()]
+        );
+    }
+
+    #[test]
+    fn removing_word_cascades_its_tags() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+        add_word_tag_in_state(&state, "de:haus", "дом", 2000).unwrap();
+
+        remove_saved_word_in_state(&state, "de", "haus").unwrap();
+
+        assert!(tag_keys(&state).is_empty());
     }
 
     fn tag_keys(state: &SavedWordsState) -> Vec<String> {
