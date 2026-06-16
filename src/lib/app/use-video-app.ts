@@ -246,6 +246,24 @@ export function useVideoApp() {
     });
   }, []);
 
+  const generateWordTags = useCallback(async (wordId: string) => {
+    setGeneratingTagWordIds((ids) => (ids.includes(wordId) ? ids : [...ids, wordId]));
+    try {
+      const prompt = await invoke<string | null>("build_word_tag_prompt", { wordId });
+      if (!prompt) return;
+      const raw = await invoke<string>("plugin:apple-intelligence|generate", { prompt });
+      const tags = await invoke<string[]>("apply_generated_tags", { wordId, raw });
+      if (tags.length > 0) {
+        savedWordsMutatedRef.current = true;
+        setSavedWords((words) => words.map((word) => (word.id === wordId ? { ...word, tags } : word)));
+      }
+    } catch {
+      // авто-теги — бонус: ошибки инференса/парсинга проглатываем тихо
+    } finally {
+      setGeneratingTagWordIds((ids) => ids.filter((id) => id !== wordId));
+    }
+  }, []);
+
   const handleToggleSavedWord = useCallback(
     async (fallbackWord: string, lookup: WordLookupState) => {
       const payload = buildSaveWordRequest({
@@ -284,13 +302,16 @@ export function useVideoApp() {
         setFreshSavedWordId(savedWord.id);
         if (freshSavedWordTimerRef.current) clearTimeout(freshSavedWordTimerRef.current);
         freshSavedWordTimerRef.current = setTimeout(() => setFreshSavedWordId(undefined), 700);
+        if (wordTaggerAvailableRef.current) {
+          void generateWordTags(savedWord.id);
+        }
       } catch {
         setSaveWordErrorKey(key);
       } finally {
         clearPendingSavedWordAction(key);
       }
     },
-    [clearPendingSavedWordAction, savedWords, selectedTrack, setPendingSavedWordAction],
+    [clearPendingSavedWordAction, generateWordTags, savedWords, selectedTrack, setPendingSavedWordAction],
   );
 
   const handleRemoveSavedWord = useCallback(

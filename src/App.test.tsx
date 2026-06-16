@@ -1722,6 +1722,94 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "Снять тег дом" })).toBeInTheDocument();
   });
 
+  it("generates theme tags on first save when the tagger is available", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      if (command === "record_recent_video") return Promise.resolve(null);
+      if (command === "plugin:apple-intelligence|availability") return Promise.resolve({ available: true });
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+      if (command === "lookup_word") {
+        return Promise.resolve(wordLookup({ query: "Welt", headword: "Welt", meanings: ["мир"] }));
+      }
+      if (command === "save_word") {
+        return Promise.resolve({
+          id: "de:welt", normalizedWord: "welt", displayWord: "Welt", language: "de",
+          languageName: "Немецкий", firstMeaning: "мир", source: "ruwiktionary-kaikki",
+          sourceUrl: null, createdAtMs: 1000, updatedAtMs: 1000, tags: [],
+        });
+      }
+      if (command === "build_word_tag_prompt") return Promise.resolve("PROMPT");
+      if (command === "plugin:apple-intelligence|generate") return Promise.resolve('["город"]');
+      if (command === "apply_generated_tags") return Promise.resolve(["город"]);
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Welt" }));
+    await screen.findByText("мир");
+    await user.click(screen.getByRole("button", { name: "Сохранить слово" }));
+
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("build_word_tag_prompt", { wordId: "de:welt" }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("plugin:apple-intelligence|generate", { prompt: "PROMPT" }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("apply_generated_tags", { wordId: "de:welt", raw: '["город"]' }));
+    expect((await screen.findAllByText("город")).length).toBeGreaterThan(0);
+  });
+
+  it("skips generation when the backend returns no prompt", async () => {
+    const user = userEvent.setup();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "list_saved_words") return Promise.resolve([]);
+      if (command === "list_recent_videos") return Promise.resolve([]);
+      if (command === "record_recent_video") return Promise.resolve(null);
+      if (command === "plugin:apple-intelligence|availability") return Promise.resolve({ available: true });
+      if (command === "load_video_from_url") {
+        return Promise.resolve(
+          loadedVideo({
+            tracks: subtitleTracks,
+            selectedTrackId: "de_1_de.vtt",
+            subtitleText: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHallo Welt",
+          }),
+        );
+      }
+      if (command === "lookup_word") {
+        return Promise.resolve(wordLookup({ query: "Welt", headword: "Welt", meanings: ["мир"] }));
+      }
+      if (command === "save_word") {
+        return Promise.resolve({
+          id: "de:welt", normalizedWord: "welt", displayWord: "Welt", language: "de",
+          languageName: "Немецкий", firstMeaning: "мир", source: "ruwiktionary-kaikki",
+          sourceUrl: null, createdAtMs: 1000, updatedAtMs: 1000, tags: [],
+        });
+      }
+      if (command === "build_word_tag_prompt") return Promise.resolve(null);
+      return Promise.reject(new Error(`unexpected command: ${command}`));
+    });
+
+    render(<App />);
+    await user.type(screen.getByLabelText("VK Video URL"), "https://vkvideo.ru/video-1_2");
+    await user.click(screen.getByRole("button", { name: /Загрузить/ }));
+    await user.click(await screen.findByRole("button", { name: "advance video" }));
+    await user.click(screen.getByRole("button", { name: "Welt" }));
+    await screen.findByText("мир");
+    await user.click(screen.getByRole("button", { name: "Сохранить слово" }));
+
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("build_word_tag_prompt", { wordId: "de:welt" }));
+    expect(mocks.invoke).not.toHaveBeenCalledWith("plugin:apple-intelligence|generate", expect.anything());
+  });
+
   it("does not call the tagger when Apple Intelligence is unavailable", async () => {
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "list_saved_words") return Promise.resolve([]);
