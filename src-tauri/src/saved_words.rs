@@ -380,6 +380,24 @@ pub fn remove_saved_word(
     remove_saved_word_in_state(&state, &language, &normalized_word).map_err(String::from)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub fn add_word_tag(
+    state: tauri::State<'_, SavedWordsState>,
+    word_id: String,
+    tag: String,
+) -> Result<Vec<String>, String> {
+    add_word_tag_in_state(&state, &word_id, &tag, now_ms()).map_err(String::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn remove_word_tag(
+    state: tauri::State<'_, SavedWordsState>,
+    word_id: String,
+    tag: String,
+) -> Result<Vec<String>, String> {
+    remove_word_tag_in_state(&state, &word_id, &tag).map_err(String::from)
+}
+
 fn find_saved_word(
     connection: &Connection,
     id: &str,
@@ -619,8 +637,7 @@ mod tests {
 
         let empty = add_word_tag_in_state(&state, "de:haus", "   ", 2000).unwrap_err();
         let punctuation = add_word_tag_in_state(&state, "de:haus", "...", 2000).unwrap_err();
-        let too_long =
-            add_word_tag_in_state(&state, "de:haus", &"a".repeat(41), 2000).unwrap_err();
+        let too_long = add_word_tag_in_state(&state, "de:haus", &"a".repeat(41), 2000).unwrap_err();
 
         assert_eq!(empty, SavedWordsError::InvalidTag);
         assert_eq!(punctuation, SavedWordsError::InvalidTag);
