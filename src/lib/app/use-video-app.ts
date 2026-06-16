@@ -255,6 +255,8 @@ export function useVideoApp() {
       const tags = await invoke<string[]>("apply_generated_tags", { wordId, raw });
       if (tags.length > 0) {
         savedWordsMutatedRef.current = true;
+        // Если слово удалили, пока шла генерация, map — безопасный no-op
+        // (бэкенд apply_generated_tags при этом вернёт invalid-saved-word и мы попадём в catch).
         setSavedWords((words) => words.map((word) => (word.id === wordId ? { ...word, tags } : word)));
       }
     } catch {
@@ -884,7 +886,6 @@ export function useVideoApp() {
     selectedTagKeys,
     tagPendingWordIds,
     generatingTagWordIds,
-    setGeneratingTagWordIds,
     recentVideos,
     areRecentVideosLoading,
     recentVideosUnavailable,

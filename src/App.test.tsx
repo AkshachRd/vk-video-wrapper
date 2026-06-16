@@ -1808,6 +1808,7 @@ describe("App", () => {
 
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("build_word_tag_prompt", { wordId: "de:welt" }));
     expect(mocks.invoke).not.toHaveBeenCalledWith("plugin:apple-intelligence|generate", expect.anything());
+    expect(mocks.invoke).not.toHaveBeenCalledWith("apply_generated_tags", expect.anything());
   });
 
   it("does not call the tagger when Apple Intelligence is unavailable", async () => {
