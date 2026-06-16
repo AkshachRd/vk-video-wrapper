@@ -74,4 +74,44 @@ describe("WordTagEditor", () => {
 
     expect(onRemoveTag).toHaveBeenCalledWith("de:welt", "спорт");
   });
+
+  it("dismisses the input on Escape without adding", async () => {
+    const user = userEvent.setup();
+    const onAddTag = vi.fn();
+    render(
+      <WordTagEditor
+        wordId="de:welt"
+        tags={[]}
+        suggestions={[]}
+        onAddTag={onAddTag}
+        onRemoveTag={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Добавить тег" }));
+    await user.type(screen.getByLabelText("Новый тег"), "B1{Escape}");
+
+    expect(onAddTag).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Новый тег")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Добавить тег" })).toBeInTheDocument();
+  });
+
+  it("does not add a tag that is already present", async () => {
+    const user = userEvent.setup();
+    const onAddTag = vi.fn();
+    render(
+      <WordTagEditor
+        wordId="de:welt"
+        tags={["спорт"]}
+        suggestions={[]}
+        onAddTag={onAddTag}
+        onRemoveTag={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Добавить тег" }));
+    await user.type(screen.getByLabelText("Новый тег"), "Спорт{Enter}");
+
+    expect(onAddTag).not.toHaveBeenCalled();
+  });
 });

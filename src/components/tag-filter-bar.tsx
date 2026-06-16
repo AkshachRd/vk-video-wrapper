@@ -15,6 +15,7 @@ export function TagFilterBar({ options, selectedKeys, onToggle, onReset }: TagFi
 
   return (
     <div
+      role="group"
       aria-label="Фильтр по тегам"
       className="flex flex-wrap items-center gap-1.5 px-[18px] pb-3"
     >

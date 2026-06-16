@@ -48,7 +48,7 @@ export function WordTagEditor({
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
       {tags.map((tag) => (
         <span
-          key={tag}
+          key={normalizeTag(tag)}
           className="inline-flex items-center gap-1 rounded-full bg-paper px-2 py-0.5 text-[11px] text-ink-2"
         >
           {tag}
