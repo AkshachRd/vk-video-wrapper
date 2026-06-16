@@ -153,8 +153,7 @@ export function useVideoApp() {
 
     void (async () => {
       try {
-        const { availability } = await import("tauri-plugin-apple-intelligence-api");
-        const status = await availability();
+        const status = await invoke<{ available: boolean }>("plugin:apple-intelligence|availability");
         if (!cancelled) wordTaggerAvailableRef.current = Boolean(status?.available);
       } catch {
         if (!cancelled) wordTaggerAvailableRef.current = false;
