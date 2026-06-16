@@ -152,12 +152,21 @@ fn parse_theme_tags(raw: &str) -> Vec<String> {
 
     let candidates: Vec<String> = match parse_json_array(trimmed) {
         Some(values) => values,
-        None => trimmed
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .split(['\n', ','])
-            .map(|piece| piece.trim().trim_matches('"').to_string())
-            .collect(),
+        None => {
+            // Only attempt a fallback split when the input contains a recognisable
+            // delimiter; a plain phrase (no comma, no newline, no brackets) is
+            // treated as unparseable and yields nothing.
+            let has_delimiter = trimmed.contains(',') || trimmed.contains('\n');
+            if !has_delimiter {
+                return Vec::new();
+            }
+            trimmed
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .split(['\n', ','])
+                .map(|piece| piece.trim().trim_matches('"').to_string())
+                .collect()
+        }
     };
 
     let mut out: Vec<String> = Vec::new();
@@ -383,6 +392,30 @@ pub fn add_word_tag_in_state(
         )
         .map_err(|_| SavedWordsError::Unavailable)?;
 
+    list_word_tags_in(&connection, word_id)
+}
+
+pub fn apply_generated_tags_in_state(
+    state: &SavedWordsState,
+    word_id: &str,
+    raw: &str,
+    now_ms: i64,
+) -> Result<Vec<String>, SavedWordsError> {
+    // Существование + skip-страховка в коротком scope, затем гард освобождается.
+    {
+        let connection = state.connection()?;
+        match find_saved_word(&connection, word_id)? {
+            None => return Err(SavedWordsError::InvalidSavedWord),
+            Some(word) if !word.tags.is_empty() => return Ok(word.tags),
+            Some(_) => {}
+        }
+    }
+
+    for tag in parse_theme_tags(raw) {
+        add_word_tag_in_state(state, word_id, &tag, now_ms)?;
+    }
+
+    let connection = state.connection()?;
     list_word_tags_in(&connection, word_id)
 }
 
@@ -854,6 +887,49 @@ mod tests {
         let state = SavedWordsState::in_memory_for_tests().unwrap();
 
         let error = build_word_tag_prompt_in_state(&state, "de:ghost").unwrap_err();
+
+        assert_eq!(error, SavedWordsError::InvalidSavedWord);
+    }
+
+    #[test]
+    fn apply_generated_tags_inserts_parsed_tags() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+
+        let tags =
+            apply_generated_tags_in_state(&state, "de:haus", r#"["дом","жильё"]"#, 2000).unwrap();
+
+        assert_eq!(tags, vec!["дом".to_string(), "жильё".to_string()]);
+    }
+
+    #[test]
+    fn apply_generated_tags_is_idempotent() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+
+        apply_generated_tags_in_state(&state, "de:haus", r#"["дом"]"#, 2000).unwrap();
+        // у слова уже есть тег → skip-страховка возвращает текущие без изменений
+        let tags = apply_generated_tags_in_state(&state, "de:haus", r#"["жильё"]"#, 3000).unwrap();
+
+        assert_eq!(tags, vec!["дом".to_string()]);
+    }
+
+    #[test]
+    fn apply_generated_tags_empty_raw_adds_nothing() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        save_word_in_state(&state, request("Haus", "de"), 1000).unwrap();
+
+        let tags = apply_generated_tags_in_state(&state, "de:haus", "не знаю", 2000).unwrap();
+
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn apply_generated_tags_rejects_missing_word() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+
+        let error =
+            apply_generated_tags_in_state(&state, "de:ghost", r#"["дом"]"#, 2000).unwrap_err();
 
         assert_eq!(error, SavedWordsError::InvalidSavedWord);
     }
