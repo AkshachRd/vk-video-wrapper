@@ -6,7 +6,6 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "os:default",
-    "apple-intelligence:default"
+    "os:default"
   ]
 }

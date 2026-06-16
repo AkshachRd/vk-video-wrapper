@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "apple-intelligence",
+  "description": "On-device Apple Intelligence generation for auto word tags (macOS only)",
+  "windows": ["main"],
+  "platforms": ["macOS"],
+  "permissions": ["apple-intelligence:default"]
+}
