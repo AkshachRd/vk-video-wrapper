@@ -1873,6 +1873,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Сохранить слово" }));
 
     expect(await screen.findByText("подбираю теги…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Добавить тег" })).toBeDisabled();
     resolveGenerate('["город"]');
     await waitFor(() => expect(screen.queryByText("подбираю теги…")).not.toBeInTheDocument());
   });

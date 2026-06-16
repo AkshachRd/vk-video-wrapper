@@ -128,7 +128,10 @@ export function SavedWordsPanel({
                     onRemoveTag={onRemoveTag}
                   />
                   {generatingTagWordIdSet.has(word.id) ? (
-                    <div className="mt-1.5 font-mono text-[10px] tracking-[0.04em] text-ink-3">
+                    <div
+                      aria-live="polite"
+                      className="mt-1.5 font-mono text-[10px] tracking-[0.04em] text-ink-3"
+                    >
                       подбираю теги…
                     </div>
                   ) : null}
