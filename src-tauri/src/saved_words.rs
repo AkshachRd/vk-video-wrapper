@@ -153,8 +153,8 @@ fn parse_theme_tags(raw: &str) -> Vec<String> {
     let candidates: Vec<String> = match parse_json_array(trimmed) {
         Some(values) => values,
         None => trimmed
-            .trim_start_matches(['[', '{'])
-            .trim_end_matches([']', '}'])
+            .trim_start_matches('[')
+            .trim_end_matches(']')
             .split(['\n', ','])
             .map(|piece| piece.trim().trim_matches('"').to_string())
             .collect(),
@@ -772,5 +772,15 @@ mod tests {
         let long = "а".repeat(41);
         let raw = format!(r#"["{long}", "еда"]"#);
         assert_eq!(parse_theme_tags(&raw), vec!["еда"]);
+    }
+
+    #[test]
+    fn parse_theme_tags_splits_on_newlines() {
+        assert_eq!(parse_theme_tags("Еда\nспорт"), vec!["еда", "спорт"]);
+    }
+
+    #[test]
+    fn parse_theme_tags_returns_empty_for_blank_input() {
+        assert_eq!(parse_theme_tags(""), Vec::<String>::new());
     }
 }
