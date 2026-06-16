@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS saved_words (
   updated_at_ms INTEGER NOT NULL,
   UNIQUE(language, normalized_word)
 );
+
+CREATE TABLE IF NOT EXISTS word_tags (
+  word_id TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  tag_display TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  UNIQUE(word_id, tag)
+);
 "#;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -87,6 +95,7 @@ impl SavedWordsState {
 pub enum SavedWordsError {
     Unavailable,
     InvalidSavedWord,
+    InvalidTag,
 }
 
 impl SavedWordsError {
@@ -94,6 +103,7 @@ impl SavedWordsError {
         match self {
             SavedWordsError::Unavailable => "saved-words-unavailable",
             SavedWordsError::InvalidSavedWord => "invalid-saved-word",
+            SavedWordsError::InvalidTag => "invalid-tag",
         }
     }
 }
@@ -418,5 +428,25 @@ mod tests {
             .unwrap();
 
         assert_eq!(table_name, "saved_words");
+    }
+
+    #[test]
+    fn migration_creates_word_tags_table() {
+        let state = SavedWordsState::in_memory_for_tests().unwrap();
+        let connection = state.connection().unwrap();
+
+        let table_name: String = connection
+            .query_row(
+                r#"
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'word_tags'
+                "#,
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(table_name, "word_tags");
     }
 }
