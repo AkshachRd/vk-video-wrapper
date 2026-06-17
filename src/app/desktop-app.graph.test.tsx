@@ -39,7 +39,8 @@ describe("DesktopApp · граф", () => {
     });
     render(<DesktopApp app={app} />);
     await userEvent.click(screen.getByRole("button", { name: "Граф слов" }));
-    expect(screen.getByRole("heading", { name: "Граф слов" })).toBeInTheDocument();
+    // экран графа открыт: видны его поиск и кнопка возврата (заголовок убран)
+    expect(screen.getByLabelText("Поиск по словам и тегам")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /к плееру/ }));
     expect(screen.getByTestId("player-container")).toBeInTheDocument();
   });

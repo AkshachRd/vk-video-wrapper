@@ -22,7 +22,7 @@ function word(id: string, tags: string[]): SavedWord {
 }
 
 describe("WordGraphScreen", () => {
-  it("рисует заголовок, счётчики и кнопку назад", async () => {
+  it("рисует счётчики и кнопку назад", async () => {
     const onBack = vi.fn();
     // три слова при двух тегах (один тег несут два слова) → счётчик слов «3»
     // уникален среди всех чисел на экране (тегов 2, степени чипов 2 и 1)
@@ -32,7 +32,6 @@ describe("WordGraphScreen", () => {
         onBack={onBack}
       />,
     );
-    expect(screen.getByRole("heading", { name: "Граф слов" })).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument(); // 3 слова (тегов 2)
     await userEvent.click(screen.getByRole("button", { name: /к плееру/ }));
     expect(onBack).toHaveBeenCalled();

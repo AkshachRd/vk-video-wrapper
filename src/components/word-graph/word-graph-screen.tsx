@@ -19,15 +19,8 @@ export function WordGraphScreen({ words, onBack }: WordGraphScreenProps) {
 
   return (
     <div className="flex min-h-[calc(100vh-120px)] flex-col px-9 pt-[18px] pb-[30px]">
-      {/* шапка */}
-      <div className="flex items-end gap-3.5">
-        <div className="flex items-center gap-3">
-          <span aria-hidden="true" className="relative inline-block h-[26px] w-[26px] rounded-full border-2 border-ink after:absolute after:top-[20px] after:left-[18px] after:h-[10px] after:w-[2px] after:rotate-45 after:bg-ink after:content-['']" />
-          <div>
-            <h1 className="text-[26px] leading-none font-medium tracking-[-0.02em] text-ink">Граф слов</h1>
-            <p className="mt-1 text-[13px] text-ink-2">сохранённые слова и их теги — как созвездие связей</p>
-          </div>
-        </div>
+      {/* шапка: счётчики + возврат (заголовок убран по дизайну) */}
+      <div className="flex items-center gap-3.5">
         <div className="ml-auto flex items-center gap-3.5">
           <span className="font-mono text-[13px] text-ink-3">
             <span className="text-sm font-semibold text-ink">{graph.counts.words}</span> слов
