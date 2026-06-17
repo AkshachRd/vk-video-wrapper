@@ -131,4 +131,59 @@ describe("SavedWordsPanel", () => {
 
     expect(screen.queryByLabelText("Фильтр по тегам")).not.toBeInTheDocument();
   });
+
+  it("показывает кнопку «граф» и зовёт onOpenGraph", async () => {
+    const onOpenGraph = vi.fn();
+    render(
+      <SavedWordsPanel
+        words={[
+          {
+            id: "a",
+            normalizedWord: "muss",
+            displayWord: "muss",
+            language: "de",
+            languageName: null,
+            firstMeaning: "должен",
+            source: null,
+            sourceUrl: null,
+            createdAtMs: 0,
+            updatedAtMs: 0,
+            tags: ["aufgabe"],
+          },
+        ]}
+        onRemove={vi.fn()}
+        onAddTag={vi.fn()}
+        onRemoveTag={vi.fn()}
+        onOpenGraph={onOpenGraph}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Граф слов" }));
+    expect(onOpenGraph).toHaveBeenCalled();
+  });
+
+  it("не рисует кнопку «граф» без onOpenGraph или без слов", () => {
+    const { rerender } = render(<SavedWordsPanel words={[]} onRemove={vi.fn()} onOpenGraph={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Граф слов" })).toBeNull(); // нет слов
+    rerender(
+      <SavedWordsPanel
+        words={[
+          {
+            id: "a",
+            normalizedWord: "m",
+            displayWord: "m",
+            language: "de",
+            languageName: null,
+            firstMeaning: null,
+            source: null,
+            sourceUrl: null,
+            createdAtMs: 0,
+            updatedAtMs: 0,
+            tags: [],
+          },
+        ]}
+        onRemove={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Граф слов" })).toBeNull(); // нет колбэка
+  });
 });

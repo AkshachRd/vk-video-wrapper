@@ -10,6 +10,7 @@ import { SubtitleOverlay } from "@/components/subtitle-overlay";
 import { PlayerControls, playerControlButtonClassName } from "@/components/player-controls";
 import { SubtitleReferenceLine } from "@/components/subtitle-reference-line";
 import { VideoPlayer } from "@/components/video-player";
+import { WordGraphScreen } from "@/components/word-graph/word-graph-screen";
 import { useControlsAutoHide } from "@/lib/player/use-controls-auto-hide";
 import { formatTrackLabel } from "@/lib/subtitles/format-track-label";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ export function DesktopApp({ app }: { app: VideoApp }) {
   const [playerContainer, setPlayerContainer] = useState<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [subtitlesMenuOpen, setSubtitlesMenuOpen] = useState(false);
+  const [showGraph, setShowGraph] = useState(false);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -174,12 +176,19 @@ export function DesktopApp({ app }: { app: VideoApp }) {
           />
         ) : null}
 
-        {app.video && app.lane ? (
+        {app.video && app.lane && showGraph ? (
+          <WordGraphScreen words={app.savedWords} onBack={() => setShowGraph(false)} />
+        ) : null}
+
+        {app.video && app.lane && !showGraph ? (
           <div className="px-9 pt-[18px]">
             <div className="mb-4 flex items-center gap-3">
               <button
                 type="button"
-                onClick={app.handleBackToList}
+                onClick={() => {
+                  setShowGraph(false);
+                  app.handleBackToList();
+                }}
                 className="group/snake relative flex items-center gap-[9px] rounded-full border-[1.5px] border-line-2 bg-paper px-4 py-2 text-[13px] font-medium text-ink transition-colors duration-200 hover:border-ink"
               >
                 <span
@@ -362,6 +371,7 @@ export function DesktopApp({ app }: { app: VideoApp }) {
                 generatingTagWordIds={app.generatingTagWordIds}
                 onAddTag={app.handleAddWordTag}
                 onRemoveTag={app.handleRemoveWordTag}
+                onOpenGraph={() => setShowGraph(true)}
               />
             </div>
           </div>

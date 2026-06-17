@@ -1,0 +1,83 @@
+import { vi } from "vitest";
+
+import type { VideoApp } from "@/lib/app/use-video-app";
+
+// Полный VideoApp с заглушками; перекрывается частичным объектом в тестах.
+export function makeVideoAppStub(overrides: Partial<VideoApp> = {}): VideoApp {
+  const noop = vi.fn();
+  const base = {
+    // state
+    url: "",
+    setUrl: noop,
+    isLoading: false,
+    error: undefined,
+    video: undefined,
+    lane: undefined,
+    secondaryLane: undefined,
+    selectedTrackId: "",
+    isTrackLoading: false,
+    selectedSecondaryTrackId: "",
+    isSecondaryTrackLoading: false,
+    secondaryError: undefined,
+    isPlaying: false,
+    currentTimeMs: 0,
+    durationMs: 0,
+    volume: 1,
+    muted: false,
+    isAd: false,
+    playerMode: "clean",
+    wordLookup: { status: "idle" },
+    savedWords: [],
+    areSavedWordsLoading: false,
+    savedWordsUnavailable: false,
+    savedWordsPanelError: undefined,
+    pendingSavedWordActions: {},
+    freshSavedWordId: undefined,
+    selectedTagKeys: [],
+    tagPendingWordIds: [],
+    generatingTagWordIds: [],
+    recentVideos: [],
+    areRecentVideosLoading: false,
+    recentVideosUnavailable: false,
+    recentVideosError: undefined,
+    // derived
+    selectedTrack: undefined,
+    effectiveTimeMs: 0,
+    primaryCue: undefined,
+    showCustomUi: true,
+    blockInput: true,
+    // handlers
+    handleSubmit: vi.fn((event: { preventDefault: () => void }) => event.preventDefault()),
+    loadFromUrl: noop,
+    handleSelectRecentVideo: noop,
+    handleRemoveRecentVideo: noop,
+    handleBackToList: noop,
+    handleTrackChange: noop,
+    handleSecondaryTrackChange: noop,
+    selectPrimaryTrack: noop,
+    selectSecondaryTrack: noop,
+    handleSubtitleWordInspect: noop,
+    handleSubtitleWordInspectEnd: noop,
+    getWordSaveControl: vi.fn(() => ({ status: "unsaved", onToggle: noop })),
+    handleRemoveSavedWord: noop,
+    handleAddWordTag: noop,
+    handleRemoveWordTag: noop,
+    handleToggleTagFilter: noop,
+    handleResetTagFilter: noop,
+    handlePlaybackStart: noop,
+    handleDurationChange: noop,
+    handlePlayingChange: noop,
+    handleVolumeChange: noop,
+    handleAdChange: noop,
+    handleTimeUpdate: noop,
+    handlePlayerControlsReady: noop,
+    handlePlayPause: noop,
+    handleSeek: noop,
+    handleSetVolume: noop,
+    handleToggleMute: noop,
+    toggleVkMode: noop,
+    // utils
+    savedWordKey: (language: string, normalizedWord: string) => `${language}:${normalizedWord}`,
+  };
+  return { ...(base as unknown as VideoApp), ...overrides };
+}
