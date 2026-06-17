@@ -21,6 +21,7 @@ type SavedWordsSheetContentProps = {
   generatingTagWordIds?: string[];
   onAddTag?: (wordId: string, tag: string) => void;
   onRemoveTag?: (wordId: string, tag: string) => void;
+  onOpenGraph?: () => void;
 };
 
 // Содержимое шторки/панели сохранённых слов (mobile.css .m-sw-*).
@@ -39,6 +40,7 @@ export function SavedWordsSheetContent({
   generatingTagWordIds = [],
   onAddTag,
   onRemoveTag,
+  onOpenGraph,
 }: SavedWordsSheetContentProps) {
   const pendingWordIdSet = new Set(pendingWordIds);
   const tagPendingWordIdSet = new Set(tagPendingWordIds);
@@ -58,6 +60,15 @@ export function SavedWordsSheetContent({
       <div className="flex items-center justify-between px-[22px] pt-2 pb-3.5">
         <h3 className="text-[22px] font-semibold tracking-[-0.01em] text-ink">Слова</h3>
         <div className="flex items-center gap-2">
+          {onOpenGraph && words.length > 0 ? (
+            <button
+              type="button"
+              onClick={onOpenGraph}
+              className="rounded-full border-[1.5px] border-line-2 px-3 py-1 font-mono text-[11px] tracking-[0.04em] text-ink-2 uppercase active:bg-ink active:text-paper"
+            >
+              Открыть граф
+            </button>
+          ) : null}
           <span className="rounded-full bg-ink px-2.5 py-0.5 font-mono text-[13px] font-semibold text-paper">
             {String(visibleWords.length).padStart(2, "0")}
           </span>

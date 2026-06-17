@@ -8,6 +8,7 @@ import { SidePanel } from "@/components/mobile/side-panel";
 import { WordSheetContent } from "@/components/mobile/word-sheet-content";
 import { SavedWordsSheetContent } from "@/components/mobile/saved-words-sheet-content";
 import { TrackSheetContent } from "@/components/mobile/track-sheet-content";
+import { MobileWordGraphScreen } from "@/components/word-graph/mobile-word-graph-screen";
 import type { VideoApp } from "@/lib/app/use-video-app";
 import type { WordLookupState } from "@/lib/dictionary/types";
 import { useOrientation } from "@/lib/platform/use-orientation";
@@ -29,6 +30,7 @@ export function MobileApp({ app }: { app: VideoApp }) {
   const orientation = useOrientation();
   const [sheet, setSheet] = useState<Sheet>("none");
   const [wordTarget, setWordTarget] = useState<WordTarget | null>(null);
+  const [showGraph, setShowGraph] = useState(false);
 
   const onPlayer = Boolean(app.video && app.lane);
   const useLandscapePlayer = orientation === "landscape" && onPlayer;
@@ -57,6 +59,7 @@ export function MobileApp({ app }: { app: VideoApp }) {
   };
 
   const onBack = () => {
+    setShowGraph(false);
     setWordTarget(null);
     setSheet("none");
     app.handleBackToList();
@@ -67,7 +70,11 @@ export function MobileApp({ app }: { app: VideoApp }) {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-paper text-ink">
-      {useLandscapePlayer && app.video ? (
+      {showGraph && app.video ? (
+        <MobileWordGraphScreen words={app.savedWords} onBack={() => setShowGraph(false)} />
+      ) : null}
+
+      {!showGraph && useLandscapePlayer && app.video ? (
         <LandscapePlayer
           embedUrl={app.video.embedUrl}
           title={app.video.title}
@@ -98,7 +105,7 @@ export function MobileApp({ app }: { app: VideoApp }) {
           onOpenSaved={() => setSheet("saved")}
           savedWordsCount={savedWordsCount}
         />
-      ) : onPlayer && app.video ? (
+      ) : !showGraph && onPlayer && app.video ? (
         <MobilePlayerScreen
           embedUrl={app.video.embedUrl}
           title={app.video.title}
@@ -126,7 +133,7 @@ export function MobileApp({ app }: { app: VideoApp }) {
           onOpenSaved={() => setSheet("saved")}
           savedWordsCount={savedWordsCount}
         />
-      ) : (
+      ) : showGraph ? null : (
         <MobileStartScreen
           url={app.url}
           onUrlChange={app.setUrl}
@@ -170,6 +177,10 @@ export function MobileApp({ app }: { app: VideoApp }) {
             generatingTagWordIds={app.generatingTagWordIds}
             onAddTag={app.handleAddWordTag}
             onRemoveTag={app.handleRemoveWordTag}
+            onOpenGraph={() => {
+              setSheet("none");
+              setShowGraph(true);
+            }}
           />
         </Shell>
       ) : null}
