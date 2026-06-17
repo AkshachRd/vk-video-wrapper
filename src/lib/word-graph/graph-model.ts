@@ -131,3 +131,40 @@ export function reconcileGraph(prev: GraphData, next: GraphData): GraphData {
   }
   return next;
 }
+
+export interface SearchResult {
+  core: Set<string>; // прямые совпадения
+  highlight: Set<string>; // совпадения + соседи
+}
+
+// Единый поиск по словам И тегам: подстрока в ярлыке, значении слова
+// или в ярлыках тегов слова. Пустой запрос — без совпадений.
+export function matchNodes(nodes: GraphNode[], query: string): SearchResult {
+  const q = query.trim().toLowerCase();
+  const core = new Set<string>();
+  if (!q) return { core, highlight: new Set() };
+
+  for (const n of nodes) {
+    if (n.label.toLowerCase().includes(q)) {
+      core.add(n.id);
+      continue;
+    }
+    if (n.type === "word") {
+      if (n.meaning && n.meaning.toLowerCase().includes(q)) {
+        core.add(n.id);
+        continue;
+      }
+      if (n.tags && n.tags.some((t) => t.toLowerCase().includes(q))) {
+        core.add(n.id);
+      }
+    }
+  }
+
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const highlight = new Set(core);
+  for (const id of core) {
+    const node = byId.get(id);
+    node?.neighbors.forEach((nb) => highlight.add(nb));
+  }
+  return { core, highlight };
+}

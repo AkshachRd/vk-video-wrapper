@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SavedWord } from "@/lib/saved-words/types";
-import { buildGraph, reconcileGraph, seedLayout } from "./graph-model";
+import { buildGraph, matchNodes, reconcileGraph, seedLayout } from "./graph-model";
 
 function word(overrides: Partial<SavedWord> = {}): SavedWord {
   return {
@@ -113,5 +113,36 @@ describe("reconcileGraph", () => {
     const merged = reconcileGraph(prev, next);
     expect(merged.nodes.find((n) => n.id === "word:a")).toBeUndefined();
     expect(merged.nodes.find((n) => n.id === "word:b")).toBeDefined();
+  });
+});
+
+describe("matchNodes", () => {
+  const data = buildGraph([
+    word({ id: "nein", displayWord: "nein", firstMeaning: "нет", tags: ["negation", "decline"] }),
+    word({ id: "tag", displayWord: "tag", firstMeaning: "день", tags: ["time"] }),
+  ]);
+
+  it("пустой запрос не даёт совпадений", () => {
+    const r = matchNodes(data.nodes, "  ");
+    expect(r.core.size).toBe(0);
+    expect(r.highlight.size).toBe(0);
+  });
+
+  it("находит по ярлыку слова и добавляет соседей в highlight", () => {
+    const r = matchNodes(data.nodes, "nein");
+    expect(r.core.has("word:nein")).toBe(true);
+    expect(r.highlight.has("tag:negation")).toBe(true); // сосед
+    expect(r.highlight.has("tag:decline")).toBe(true);
+  });
+
+  it("находит по значению слова и по ярлыку тега", () => {
+    expect(matchNodes(data.nodes, "день").core.has("word:tag")).toBe(true);
+    expect(matchNodes(data.nodes, "negation").core.has("tag:negation")).toBe(true);
+    // совпадение по тексту тега у слова
+    expect(matchNodes(data.nodes, "decline").core.has("word:nein")).toBe(true);
+  });
+
+  it("регистронезависимый и по подстроке", () => {
+    expect(matchNodes(data.nodes, "NEG").core.has("tag:negation")).toBe(true);
   });
 });
