@@ -84,3 +84,50 @@ export function buildGraph(words: SavedWord[]): GraphData {
 
   return { nodes, links };
 }
+
+const SEED_R = 230;
+
+// Засев позиций: теги по внутреннему кольцу, слова по внешнему с джиттером.
+export function seedLayout(data: GraphData): void {
+  const tags = data.nodes.filter((n) => n.type === "tag");
+  const words = data.nodes.filter((n) => n.type === "word");
+  tags.forEach((n, i) => {
+    const a = (i / Math.max(1, tags.length)) * Math.PI * 2;
+    n.x = Math.cos(a) * SEED_R * 0.5;
+    n.y = Math.sin(a) * SEED_R * 0.5;
+    n.vx = 0;
+    n.vy = 0;
+    n.phase = Math.random() * Math.PI * 2;
+  });
+  words.forEach((n, i) => {
+    const a = (i / Math.max(1, words.length)) * Math.PI * 2 + 0.3;
+    n.x = Math.cos(a) * SEED_R * (0.95 + Math.random() * 0.25);
+    n.y = Math.sin(a) * SEED_R * (0.95 + Math.random() * 0.25);
+    n.vx = 0;
+    n.vy = 0;
+    n.phase = Math.random() * Math.PI * 2;
+  });
+}
+
+// Пересборка с сохранением координат: выжившие узлы (по id) держат
+// x/y/vx/vy/phase, новые — засеваются.
+export function reconcileGraph(prev: GraphData, next: GraphData): GraphData {
+  const prevById = new Map(prev.nodes.map((n) => [n.id, n]));
+  for (const node of next.nodes) {
+    const old = prevById.get(node.id);
+    if (old) {
+      node.x = old.x;
+      node.y = old.y;
+      node.vx = old.vx;
+      node.vy = old.vy;
+      node.phase = old.phase;
+    } else {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = node.type === "tag" ? SEED_R * 0.5 : SEED_R * (0.95 + Math.random() * 0.25);
+      node.x = Math.cos(angle) * radius;
+      node.y = Math.sin(angle) * radius;
+      node.phase = Math.random() * Math.PI * 2;
+    }
+  }
+  return next;
+}

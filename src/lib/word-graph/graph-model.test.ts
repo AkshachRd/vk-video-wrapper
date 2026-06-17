@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SavedWord } from "@/lib/saved-words/types";
-import { buildGraph } from "./graph-model";
+import { buildGraph, reconcileGraph, seedLayout } from "./graph-model";
 
 function word(overrides: Partial<SavedWord> = {}): SavedWord {
   return {
@@ -65,5 +65,53 @@ describe("buildGraph", () => {
     expect(w.tags).toEqual(["negation"]);
     const t = nodes.find((n) => n.type === "tag")!;
     expect(t.id).toBe("tag:negation");
+  });
+});
+
+describe("seedLayout", () => {
+  it("разносит узлы из начала координат (теги ближе, слова дальше)", () => {
+    const data = buildGraph([word({ id: "a", tags: ["aufgabe"] })]);
+    seedLayout(data);
+    for (const n of data.nodes) {
+      expect(Math.hypot(n.x, n.y)).toBeGreaterThan(0);
+      expect(n.phase).toBeGreaterThanOrEqual(0);
+    }
+    const tag = data.nodes.find((n) => n.type === "tag")!;
+    const wordN = data.nodes.find((n) => n.type === "word")!;
+    expect(Math.hypot(tag.x, tag.y)).toBeLessThan(Math.hypot(wordN.x, wordN.y));
+  });
+});
+
+describe("reconcileGraph", () => {
+  it("сохраняет координаты выживших узлов и засевает новые", () => {
+    const prev = buildGraph([word({ id: "a", tags: ["aufgabe"] })]);
+    seedLayout(prev);
+    const a = prev.nodes.find((n) => n.id === "word:a")!;
+    a.x = 123;
+    a.y = -45;
+    a.vx = 2;
+
+    const next = buildGraph([
+      word({ id: "a", tags: ["aufgabe"] }),
+      word({ id: "b", tags: ["aufgabe"] }),
+    ]);
+    const merged = reconcileGraph(prev, next);
+
+    const keptA = merged.nodes.find((n) => n.id === "word:a")!;
+    expect(keptA.x).toBe(123);
+    expect(keptA.y).toBe(-45);
+    expect(keptA.vx).toBe(2);
+
+    const newB = merged.nodes.find((n) => n.id === "word:b")!;
+    expect(Math.hypot(newB.x, newB.y)).toBeGreaterThan(0); // засеян
+  });
+
+  it("отбрасывает узлы, которых больше нет", () => {
+    const prev = buildGraph([word({ id: "a", tags: ["aufgabe"] })]);
+    seedLayout(prev);
+    const next = buildGraph([word({ id: "b", tags: ["aufgabe"] })]);
+    const merged = reconcileGraph(prev, next);
+    expect(merged.nodes.find((n) => n.id === "word:a")).toBeUndefined();
+    expect(merged.nodes.find((n) => n.id === "word:b")).toBeDefined();
   });
 });
