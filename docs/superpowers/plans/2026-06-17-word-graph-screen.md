@@ -2477,9 +2477,10 @@ function word(id: string, tags: string[]): SavedWord {
 describe("WordGraphScreen", () => {
   it("рисует заголовок, счётчики и кнопку назад", async () => {
     const onBack = vi.fn();
-    render(<WordGraphScreen words={[word("muss", ["aufgabe"]), word("nein", ["negation"])]} onBack={onBack} />);
+    // два слова, один общий тег → счётчик слов «2» уникален (тегов — «1»)
+    render(<WordGraphScreen words={[word("muss", ["aufgabe"]), word("nein", ["aufgabe"])]} onBack={onBack} />);
     expect(screen.getByRole("heading", { name: "Граф слов" })).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument(); // 2 слова
+    expect(screen.getByText("2")).toBeInTheDocument(); // 2 слова (тегов 1)
     await userEvent.click(screen.getByRole("button", { name: /к плееру/ }));
     expect(onBack).toHaveBeenCalled();
   });
