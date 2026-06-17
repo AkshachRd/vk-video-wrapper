@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SavedWord } from "@/lib/saved-words/types";
-import { buildGraph, matchNodes, reconcileGraph, seedLayout } from "./graph-model";
+import { buildGraph, computeHiddenIds, matchNodes, reconcileGraph, seedLayout } from "./graph-model";
 
 function word(overrides: Partial<SavedWord> = {}): SavedWord {
   return {
@@ -144,5 +144,35 @@ describe("matchNodes", () => {
 
   it("регистронезависимый и по подстроке", () => {
     expect(matchNodes(data.nodes, "NEG").core.has("tag:negation")).toBe(true);
+  });
+});
+
+describe("computeHiddenIds", () => {
+  const data = buildGraph([
+    word({ id: "a", tags: ["aufgabe"] }),
+    word({ id: "b", tags: ["time"] }),
+  ]);
+
+  it("без фильтров не прячет ничего", () => {
+    const hidden = computeHiddenIds(data.nodes, { tags: new Set(), type: "all" });
+    expect(hidden.size).toBe(0);
+  });
+
+  it("type=word прячет теги, type=tag прячет слова", () => {
+    const wOnly = computeHiddenIds(data.nodes, { tags: new Set(), type: "word" });
+    expect(wOnly.has("tag:aufgabe")).toBe(true);
+    expect(wOnly.has("word:a")).toBe(false);
+
+    const tOnly = computeHiddenIds(data.nodes, { tags: new Set(), type: "tag" });
+    expect(tOnly.has("word:a")).toBe(true);
+    expect(tOnly.has("tag:aufgabe")).toBe(false);
+  });
+
+  it("выбранные теги оставляют только их и несущие слова", () => {
+    const hidden = computeHiddenIds(data.nodes, { tags: new Set(["aufgabe"]), type: "all" });
+    expect(hidden.has("tag:aufgabe")).toBe(false);
+    expect(hidden.has("word:a")).toBe(false);
+    expect(hidden.has("tag:time")).toBe(true);
+    expect(hidden.has("word:b")).toBe(true);
   });
 });

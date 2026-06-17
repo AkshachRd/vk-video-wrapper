@@ -1,6 +1,6 @@
 import { collectTagOptions, normalizeTag } from "@/lib/saved-words/tags";
 import type { SavedWord } from "@/lib/saved-words/types";
-import type { GraphData, GraphNode } from "./types";
+import type { GraphData, GraphFilters, GraphNode } from "./types";
 
 const TAG_BASE_R = 15;
 const TAG_DEG_R = 1.7;
@@ -167,4 +167,21 @@ export function matchNodes(nodes: GraphNode[], query: string): SearchResult {
     node?.neighbors.forEach((nb) => highlight.add(nb));
   }
   return { core, highlight };
+}
+
+// Возвращает множество id скрытых узлов по фильтрам (тип + теги, И-логика).
+export function computeHiddenIds(nodes: GraphNode[], filters: GraphFilters): Set<string> {
+  const hasTagFilter = filters.tags.size > 0;
+  const hidden = new Set<string>();
+  for (const n of nodes) {
+    let visible = true;
+    if (filters.type === "word" && n.type === "tag") visible = false;
+    if (filters.type === "tag" && n.type === "word") visible = false;
+    if (visible && hasTagFilter) {
+      if (n.type === "tag") visible = !!n.key && filters.tags.has(n.key);
+      else visible = !!n.tagKeys && n.tagKeys.some((k) => filters.tags.has(k));
+    }
+    if (!visible) hidden.add(n.id);
+  }
+  return hidden;
 }
