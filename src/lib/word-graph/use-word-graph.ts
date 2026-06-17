@@ -37,6 +37,7 @@ export interface WordGraphController {
   zoomOut: () => void;
   reset: () => void;
   focusAndSelect: (id: string) => void;
+  focusFirstMatch: () => void;
   closeCard: () => void;
 }
 
@@ -183,6 +184,13 @@ export function useWordGraph(words: SavedWord[], reduceMotion = false): WordGrap
     },
     [focusNode, selectById],
   );
+
+  const focusFirstMatch = useCallback(() => {
+    const sim = simRef.current;
+    if (!sim || !sim.core || sim.core.size === 0) return;
+    const first = sim.data.nodes.find((n) => sim.core!.has(n.id));
+    if (first) focusNode(first.id);
+  }, [focusNode]);
 
   const closeCard = useCallback(() => selectById(null), [selectById]);
 
@@ -435,6 +443,7 @@ export function useWordGraph(words: SavedWord[], reduceMotion = false): WordGrap
     zoomOut,
     reset,
     focusAndSelect,
+    focusFirstMatch,
     closeCard,
   };
 }

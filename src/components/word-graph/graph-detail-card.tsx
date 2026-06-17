@@ -14,7 +14,7 @@ export function GraphDetailCard({ card, onClose, onFocusNode, className }: Graph
   return (
     <div
       className={cn(
-        "w-[274px] rounded-card border border-line bg-paper p-4 shadow-[0_12px_40px_rgba(12,12,12,0.12)] motion-safe:animate-popin",
+        "relative w-[274px] rounded-card border border-line bg-paper p-4 shadow-[0_12px_40px_rgba(12,12,12,0.12)] motion-safe:animate-popin",
         className,
       )}
     >

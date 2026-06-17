@@ -41,7 +41,7 @@ export function MobileWordGraphScreen({ words, onBack }: MobileWordGraphScreenPr
         </div>
       ) : (
         <>
-          <GraphSearchField className="mt-3" value={graph.search} onChange={graph.setSearch} />
+          <GraphSearchField className="mt-3" value={graph.search} onChange={graph.setSearch} onEnter={graph.focusFirstMatch} />
           <div className="mt-2.5 -mx-4 overflow-x-auto px-4">
             <GraphFilterRow
               className="min-w-max"

@@ -59,6 +59,7 @@ export function WordGraphScreen({ words, onBack }: WordGraphScreenProps) {
             className="mt-5"
             value={graph.search}
             onChange={graph.setSearch}
+            onEnter={graph.focusFirstMatch}
           />
           <GraphFilterRow
             className="mt-3.5"
