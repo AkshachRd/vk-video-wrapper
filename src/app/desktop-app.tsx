@@ -10,6 +10,7 @@ import { SubtitleOverlay } from "@/components/subtitle-overlay";
 import { PlayerControls, playerControlButtonClassName } from "@/components/player-controls";
 import { SubtitleReferenceLine } from "@/components/subtitle-reference-line";
 import { VideoPlayer } from "@/components/video-player";
+import { WordGraphScreen } from "@/components/word-graph/word-graph-screen";
 import { useControlsAutoHide } from "@/lib/player/use-controls-auto-hide";
 import { formatTrackLabel } from "@/lib/subtitles/format-track-label";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ export function DesktopApp({ app }: { app: VideoApp }) {
   const [playerContainer, setPlayerContainer] = useState<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [subtitlesMenuOpen, setSubtitlesMenuOpen] = useState(false);
+  const [showGraph, setShowGraph] = useState(false);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -118,38 +120,43 @@ export function DesktopApp({ app }: { app: VideoApp }) {
   return (
     <main className="mx-auto w-full max-w-[1140px] min-w-[960px]">
       <div className="relative pb-[34px]">
-        {/* мастхед: в этой версии дизайна — только волна */}
-        <header className="px-9 pt-[34px] pb-2">
-          <Wave className="mt-[18px] h-[18px]" />
-        </header>
+        {/* мастхед и форма загрузки скрыты на экране графа */}
+        {!showGraph ? (
+          <>
+            {/* мастхед: в этой версии дизайна — только волна */}
+            <header className="px-9 pt-[34px] pb-2">
+              <Wave className="mt-[18px] h-[18px]" />
+            </header>
 
-        <form
-          className="mx-9 mt-[22px] flex items-center gap-2 rounded-full border-[1.5px] border-line-2 bg-paper py-1.5 pr-1.5 pl-[22px] [transition:border-color_0.2s_var(--ease-soft),box-shadow_0.2s_var(--ease-soft)] focus-within:border-ink focus-within:shadow-[0_0_0_4px_rgba(12,12,12,0.05)]"
-          onSubmit={app.handleSubmit}
-        >
-          <input
-            aria-label="VK Video URL"
-            placeholder="вставь ссылку vkvideo.ru/video…"
-            value={app.url}
-            disabled={app.isLoading}
-            onChange={(event) => app.setUrl(event.target.value)}
-            className="min-w-0 flex-1 border-0 bg-transparent py-2.5 text-[15px] tracking-[-0.01em] text-ink outline-none placeholder:text-ink-3"
-          />
-          <button
-            type="submit"
-            disabled={app.isLoading}
-            className="group/snake relative flex h-11 items-center gap-[9px] rounded-full bg-ink px-6 text-sm font-medium tracking-[0.01em] whitespace-nowrap text-paper [transition:opacity_0.2s,scale_0.4s_var(--ease-spring)] active:scale-[0.97] disabled:cursor-progress disabled:opacity-45"
-          >
-            {app.isLoading ? "Загрузка" : "Загрузить"}
-            <span
-              aria-hidden="true"
-              className="inline-block transition-transform duration-500 ease-spring group-hover/snake:translate-x-[5px]"
+            <form
+              className="mx-9 mt-[22px] flex items-center gap-2 rounded-full border-[1.5px] border-line-2 bg-paper py-1.5 pr-1.5 pl-[22px] [transition:border-color_0.2s_var(--ease-soft),box-shadow_0.2s_var(--ease-soft)] focus-within:border-ink focus-within:shadow-[0_0_0_4px_rgba(12,12,12,0.05)]"
+              onSubmit={app.handleSubmit}
             >
-              →
-            </span>
-            <SnakeBorder shape="pill" />
-          </button>
-        </form>
+              <input
+                aria-label="VK Video URL"
+                placeholder="вставь ссылку vkvideo.ru/video…"
+                value={app.url}
+                disabled={app.isLoading}
+                onChange={(event) => app.setUrl(event.target.value)}
+                className="min-w-0 flex-1 border-0 bg-transparent py-2.5 text-[15px] tracking-[-0.01em] text-ink outline-none placeholder:text-ink-3"
+              />
+              <button
+                type="submit"
+                disabled={app.isLoading}
+                className="group/snake relative flex h-11 items-center gap-[9px] rounded-full bg-ink px-6 text-sm font-medium tracking-[0.01em] whitespace-nowrap text-paper [transition:opacity_0.2s,scale_0.4s_var(--ease-spring)] active:scale-[0.97] disabled:cursor-progress disabled:opacity-45"
+              >
+                {app.isLoading ? "Загрузка" : "Загрузить"}
+                <span
+                  aria-hidden="true"
+                  className="inline-block transition-transform duration-500 ease-spring group-hover/snake:translate-x-[5px]"
+                >
+                  →
+                </span>
+                <SnakeBorder shape="pill" />
+              </button>
+            </form>
+          </>
+        ) : null}
 
         {app.isLoading ? (
           <div data-testid="load-wave" className="mx-9 mt-4 h-3.5 overflow-hidden">
@@ -174,12 +181,19 @@ export function DesktopApp({ app }: { app: VideoApp }) {
           />
         ) : null}
 
-        {app.video && app.lane ? (
+        {app.video && app.lane && showGraph ? (
+          <WordGraphScreen words={app.savedWords} onBack={() => setShowGraph(false)} />
+        ) : null}
+
+        {app.video && app.lane && !showGraph ? (
           <div className="px-9 pt-[18px]">
             <div className="mb-4 flex items-center gap-3">
               <button
                 type="button"
-                onClick={app.handleBackToList}
+                onClick={() => {
+                  setShowGraph(false);
+                  app.handleBackToList();
+                }}
                 className="group/snake relative flex items-center gap-[9px] rounded-full border-[1.5px] border-line-2 bg-paper px-4 py-2 text-[13px] font-medium text-ink transition-colors duration-200 hover:border-ink"
               >
                 <span
@@ -362,6 +376,7 @@ export function DesktopApp({ app }: { app: VideoApp }) {
                 generatingTagWordIds={app.generatingTagWordIds}
                 onAddTag={app.handleAddWordTag}
                 onRemoveTag={app.handleRemoveWordTag}
+                onOpenGraph={() => setShowGraph(true)}
               />
             </div>
           </div>

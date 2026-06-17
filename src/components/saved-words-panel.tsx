@@ -21,6 +21,7 @@ type SavedWordsPanelProps = {
   generatingTagWordIds?: string[];
   onAddTag?: (wordId: string, tag: string) => void;
   onRemoveTag?: (wordId: string, tag: string) => void;
+  onOpenGraph?: () => void;
 };
 
 export function SavedWordsPanel({
@@ -38,6 +39,7 @@ export function SavedWordsPanel({
   generatingTagWordIds = [],
   onAddTag,
   onRemoveTag,
+  onOpenGraph,
 }: SavedWordsPanelProps) {
   const pendingWordIdSet = new Set(pendingWordIds);
   const tagPendingWordIdSet = new Set(tagPendingWordIds);
@@ -61,6 +63,15 @@ export function SavedWordsPanel({
       <div className="flex items-center justify-between gap-3 px-[18px] pt-[18px] pb-3.5">
         <h2 className="text-base font-semibold tracking-[-0.01em] text-ink">Слова</h2>
         <div className="flex items-center gap-1.5">
+          {onOpenGraph && words.length > 0 ? (
+            <button
+              type="button"
+              onClick={onOpenGraph}
+              className="rounded-full border-[1.5px] border-line-2 px-2.5 py-0.5 font-mono text-[10px] tracking-[0.06em] text-ink-2 uppercase transition-colors hover:border-ink hover:text-ink"
+            >
+              Граф слов
+            </button>
+          ) : null}
           <span className="min-w-6 rounded-full bg-ink px-[9px] py-0.5 text-center font-mono text-xs font-medium text-paper">
             {String(visibleWords.length).padStart(2, "0")}
           </span>

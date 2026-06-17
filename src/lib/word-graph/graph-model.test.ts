@@ -1,0 +1,252 @@
+import { describe, expect, it } from "vitest";
+
+import type { SavedWord } from "@/lib/saved-words/types";
+import {
+  buildGraph,
+  cardDataFor,
+  computeHiddenIds,
+  matchNodes,
+  nodeAt,
+  reconcileGraph,
+  seedLayout,
+  tagOptionsFromNodes,
+  toScreenX,
+  toWorldX,
+} from "./graph-model";
+import type { Camera } from "./types";
+
+function word(overrides: Partial<SavedWord> = {}): SavedWord {
+  return {
+    id: "de-haus",
+    normalizedWord: "haus",
+    displayWord: "Haus",
+    language: "de",
+    languageName: "Немецкий",
+    firstMeaning: "дом",
+    source: null,
+    sourceUrl: null,
+    createdAtMs: 1000,
+    updatedAtMs: 1000,
+    tags: [],
+    ...overrides,
+  };
+}
+
+describe("buildGraph", () => {
+  it("создаёт по узлу на слово и по узлу на уникальный тег", () => {
+    const { nodes } = buildGraph([
+      word({ id: "a", displayWord: "muss", tags: ["aufgabe", "pflicht"] }),
+      word({ id: "b", displayWord: "arbeit", tags: ["Aufgabe"] }), // дедуп по нормализованному ключу
+    ]);
+    const words = nodes.filter((n) => n.type === "word");
+    const tags = nodes.filter((n) => n.type === "tag");
+    expect(words).toHaveLength(2);
+    expect(tags.map((t) => t.key).sort()).toEqual(["aufgabe", "pflicht"]);
+  });
+
+  it("связывает слово с каждым его тегом и считает степень тега", () => {
+    const { nodes, links } = buildGraph([
+      word({ id: "a", tags: ["aufgabe", "pflicht"] }),
+      word({ id: "b", tags: ["aufgabe"] }),
+    ]);
+    expect(links).toHaveLength(3);
+    const aufgabe = nodes.find((n) => n.key === "aufgabe")!;
+    expect(aufgabe.deg).toBe(2);
+    expect(aufgabe.r).toBeCloseTo(15 + 2 * 1.7, 5);
+    const wordA = nodes.find((n) => n.id === "word:a")!;
+    expect(wordA.r).toBe(7);
+    expect(wordA.neighbors).toContain(aufgabe.id);
+    expect(aufgabe.neighbors).toContain("word:a");
+  });
+
+  it("слова без тегов остаются изолированными узлами", () => {
+    const { nodes, links } = buildGraph([word({ id: "lonely", tags: [] })]);
+    expect(links).toHaveLength(0);
+    const n = nodes.find((x) => x.id === "word:lonely")!;
+    expect(n.neighbors).toHaveLength(0);
+    expect(n.deg).toBe(0);
+  });
+
+  it("даёт префиксованные id и берёт lang/meaning из слова", () => {
+    const { nodes } = buildGraph([
+      word({ id: "x", displayWord: "no", language: "en", firstMeaning: "нет", tags: ["negation"] }),
+    ]);
+    const w = nodes.find((n) => n.id === "word:x")!;
+    expect(w.lang).toBe("EN");
+    expect(w.meaning).toBe("нет");
+    expect(w.tags).toEqual(["negation"]);
+    const t = nodes.find((n) => n.type === "tag")!;
+    expect(t.id).toBe("tag:negation");
+  });
+
+  it("дедуплицирует теги слова, нормализующиеся в один ключ", () => {
+    const { nodes, links } = buildGraph([word({ id: "a", tags: ["Aufgabe", "aufgabe"] })]);
+    expect(links).toHaveLength(1);
+    const tag = nodes.find((n) => n.key === "aufgabe")!;
+    expect(tag.deg).toBe(1);
+    const w = nodes.find((n) => n.id === "word:a")!;
+    expect(w.neighbors).toEqual(["tag:aufgabe"]);
+    expect(w.tagKeys).toEqual(["aufgabe"]);
+  });
+});
+
+describe("seedLayout", () => {
+  it("разносит узлы из начала координат (теги ближе, слова дальше)", () => {
+    const data = buildGraph([word({ id: "a", tags: ["aufgabe"] })]);
+    seedLayout(data);
+    for (const n of data.nodes) {
+      expect(Math.hypot(n.x, n.y)).toBeGreaterThan(0);
+      expect(n.phase).toBeGreaterThanOrEqual(0);
+    }
+    const tag = data.nodes.find((n) => n.type === "tag")!;
+    const wordN = data.nodes.find((n) => n.type === "word")!;
+    expect(Math.hypot(tag.x, tag.y)).toBeLessThan(Math.hypot(wordN.x, wordN.y));
+  });
+});
+
+describe("reconcileGraph", () => {
+  it("сохраняет координаты выживших узлов и засевает новые", () => {
+    const prev = buildGraph([word({ id: "a", tags: ["aufgabe"] })]);
+    seedLayout(prev);
+    const a = prev.nodes.find((n) => n.id === "word:a")!;
+    a.x = 123;
+    a.y = -45;
+    a.vx = 2;
+
+    const next = buildGraph([
+      word({ id: "a", tags: ["aufgabe"] }),
+      word({ id: "b", tags: ["aufgabe"] }),
+    ]);
+    const merged = reconcileGraph(prev, next);
+
+    const keptA = merged.nodes.find((n) => n.id === "word:a")!;
+    expect(keptA.x).toBe(123);
+    expect(keptA.y).toBe(-45);
+    expect(keptA.vx).toBe(2);
+
+    const newB = merged.nodes.find((n) => n.id === "word:b")!;
+    expect(Math.hypot(newB.x, newB.y)).toBeGreaterThan(0); // засеян
+  });
+
+  it("отбрасывает узлы, которых больше нет", () => {
+    const prev = buildGraph([word({ id: "a", tags: ["aufgabe"] })]);
+    seedLayout(prev);
+    const next = buildGraph([word({ id: "b", tags: ["aufgabe"] })]);
+    const merged = reconcileGraph(prev, next);
+    expect(merged.nodes.find((n) => n.id === "word:a")).toBeUndefined();
+    expect(merged.nodes.find((n) => n.id === "word:b")).toBeDefined();
+  });
+});
+
+describe("matchNodes", () => {
+  const data = buildGraph([
+    word({ id: "nein", displayWord: "nein", firstMeaning: "нет", tags: ["negation", "decline"] }),
+    word({ id: "tag", displayWord: "tag", firstMeaning: "день", tags: ["time"] }),
+  ]);
+
+  it("пустой запрос не даёт совпадений", () => {
+    const r = matchNodes(data.nodes, "  ");
+    expect(r.core.size).toBe(0);
+    expect(r.highlight.size).toBe(0);
+  });
+
+  it("находит по ярлыку слова и добавляет соседей в highlight", () => {
+    const r = matchNodes(data.nodes, "nein");
+    expect(r.core.has("word:nein")).toBe(true);
+    expect(r.highlight.has("tag:negation")).toBe(true); // сосед
+    expect(r.highlight.has("tag:decline")).toBe(true);
+  });
+
+  it("находит по значению слова и по ярлыку тега", () => {
+    expect(matchNodes(data.nodes, "день").core.has("word:tag")).toBe(true);
+    expect(matchNodes(data.nodes, "negation").core.has("tag:negation")).toBe(true);
+    // совпадение по тексту тега у слова
+    expect(matchNodes(data.nodes, "decline").core.has("word:nein")).toBe(true);
+  });
+
+  it("регистронезависимый и по подстроке", () => {
+    expect(matchNodes(data.nodes, "NEG").core.has("tag:negation")).toBe(true);
+  });
+});
+
+describe("computeHiddenIds", () => {
+  const data = buildGraph([
+    word({ id: "a", tags: ["aufgabe"] }),
+    word({ id: "b", tags: ["time"] }),
+  ]);
+
+  it("без фильтров не прячет ничего", () => {
+    const hidden = computeHiddenIds(data.nodes, { tags: new Set(), type: "all" });
+    expect(hidden.size).toBe(0);
+  });
+
+  it("type=word прячет теги, type=tag прячет слова", () => {
+    const wOnly = computeHiddenIds(data.nodes, { tags: new Set(), type: "word" });
+    expect(wOnly.has("tag:aufgabe")).toBe(true);
+    expect(wOnly.has("word:a")).toBe(false);
+
+    const tOnly = computeHiddenIds(data.nodes, { tags: new Set(), type: "tag" });
+    expect(tOnly.has("word:a")).toBe(true);
+    expect(tOnly.has("tag:aufgabe")).toBe(false);
+  });
+
+  it("выбранные теги оставляют только их и несущие слова", () => {
+    const hidden = computeHiddenIds(data.nodes, { tags: new Set(["aufgabe"]), type: "all" });
+    expect(hidden.has("tag:aufgabe")).toBe(false);
+    expect(hidden.has("word:a")).toBe(false);
+    expect(hidden.has("tag:time")).toBe(true);
+    expect(hidden.has("word:b")).toBe(true);
+  });
+});
+
+describe("transforms", () => {
+  const cam: Camera = { x: 50, y: -20, scale: 1.5 };
+  it("world→screen→world возвращает исходную координату", () => {
+    expect(toWorldX(toScreenX(12.5, cam), cam)).toBeCloseTo(12.5, 6);
+  });
+});
+
+describe("nodeAt", () => {
+  it("находит узел под экранной точкой и пропускает скрытые", () => {
+    const data = buildGraph([word({ id: "a", tags: [] })]);
+    const cam: Camera = { x: 0, y: 0, scale: 1 };
+    const n = data.nodes[0];
+    n.x = 0;
+    n.y = 0; // экранная точка (0,0)
+    expect(nodeAt(data.nodes, 0, 0, cam)?.id).toBe(n.id);
+    expect(nodeAt(data.nodes, 999, 999, cam)).toBeNull();
+    n.hidden = true;
+    expect(nodeAt(data.nodes, 0, 0, cam)).toBeNull();
+  });
+});
+
+describe("tagOptionsFromNodes", () => {
+  it("даёт ключ/ярлык/счётчик из тег-узлов, сортируя по ключу", () => {
+    const data = buildGraph([
+      word({ id: "a", tags: ["time", "aufgabe"] }),
+      word({ id: "b", tags: ["aufgabe"] }),
+    ]);
+    expect(tagOptionsFromNodes(data.nodes)).toEqual([
+      { key: "aufgabe", display: "aufgabe", count: 2 },
+      { key: "time", display: "time", count: 1 },
+    ]);
+  });
+});
+
+describe("cardDataFor", () => {
+  const data = buildGraph([
+    word({ id: "nein", displayWord: "nein", language: "de", tags: ["negation"] }),
+  ]);
+  it("для слова перечисляет его теги", () => {
+    const node = data.nodes.find((n) => n.id === "word:nein")!;
+    const card = cardDataFor(node, data.nodes);
+    expect(card.kind).toBe("word");
+    if (card.kind === "word") expect(card.tags).toEqual([{ id: "tag:negation", label: "negation" }]);
+  });
+  it("для тега перечисляет несущие слова с языком", () => {
+    const node = data.nodes.find((n) => n.id === "tag:negation")!;
+    const card = cardDataFor(node, data.nodes);
+    expect(card.kind).toBe("tag");
+    if (card.kind === "tag") expect(card.words).toEqual([{ id: "word:nein", label: "nein", lang: "DE" }]);
+  });
+});
