@@ -41,7 +41,7 @@ export function buildGraph(words: SavedWord[]): GraphData {
 
   for (const word of words) {
     const id = `word:${word.id}`;
-    const tagKeys = word.tags.map(normalizeTag).filter(Boolean);
+    const tagKeys = [...new Set(word.tags.map(normalizeTag).filter(Boolean))];
     const node: GraphNode = {
       id,
       type: "word",

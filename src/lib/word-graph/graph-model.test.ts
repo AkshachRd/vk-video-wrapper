@@ -78,6 +78,16 @@ describe("buildGraph", () => {
     const t = nodes.find((n) => n.type === "tag")!;
     expect(t.id).toBe("tag:negation");
   });
+
+  it("дедуплицирует теги слова, нормализующиеся в один ключ", () => {
+    const { nodes, links } = buildGraph([word({ id: "a", tags: ["Aufgabe", "aufgabe"] })]);
+    expect(links).toHaveLength(1);
+    const tag = nodes.find((n) => n.key === "aufgabe")!;
+    expect(tag.deg).toBe(1);
+    const w = nodes.find((n) => n.id === "word:a")!;
+    expect(w.neighbors).toEqual(["tag:aufgabe"]);
+    expect(w.tagKeys).toEqual(["aufgabe"]);
+  });
 });
 
 describe("seedLayout", () => {
