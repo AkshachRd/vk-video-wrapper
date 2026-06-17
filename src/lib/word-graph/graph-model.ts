@@ -1,6 +1,6 @@
 import { collectTagOptions, normalizeTag } from "@/lib/saved-words/tags";
 import type { SavedWord } from "@/lib/saved-words/types";
-import type { GraphData, GraphFilters, GraphNode } from "./types";
+import type { Camera, CardData, GraphData, GraphFilters, GraphNode, TagOptionCount } from "./types";
 
 const TAG_BASE_R = 15;
 const TAG_DEG_R = 1.7;
@@ -184,4 +184,55 @@ export function computeHiddenIds(nodes: GraphNode[], filters: GraphFilters): Set
     if (!visible) hidden.add(n.id);
   }
   return hidden;
+}
+
+export function toScreenX(x: number, cam: Camera): number {
+  return x * cam.scale + cam.x;
+}
+export function toScreenY(y: number, cam: Camera): number {
+  return y * cam.scale + cam.y;
+}
+export function toWorldX(sx: number, cam: Camera): number {
+  return (sx - cam.x) / cam.scale;
+}
+export function toWorldY(sy: number, cam: Camera): number {
+  return (sy - cam.y) / cam.scale;
+}
+
+// Хит-тест: верхний (последний) видимый узел под экранной точкой, +4px запас.
+export function nodeAt(nodes: GraphNode[], sx: number, sy: number, cam: Camera): GraphNode | null {
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i];
+    if (n.hidden) continue;
+    const dx = sx - toScreenX(n.x, cam);
+    const dy = sy - toScreenY(n.y, cam);
+    const r = n.r * cam.scale + 4;
+    if (dx * dx + dy * dy <= r * r) return n;
+  }
+  return null;
+}
+
+// Опции чипов-фильтров из тег-узлов (ключ, ярлык, число слов), сортировка по ключу.
+export function tagOptionsFromNodes(nodes: GraphNode[]): TagOptionCount[] {
+  return nodes
+    .filter((n) => n.type === "tag")
+    .map((n) => ({ key: n.key!, display: n.label, count: n.deg }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+// Данные карточки выбранного узла.
+export function cardDataFor(node: GraphNode, nodes: GraphNode[]): CardData {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  if (node.type === "word") {
+    const tags = (node.tagKeys ?? []).map((key) => {
+      const tagNode = byId.get(`tag:${key}`);
+      return { id: `tag:${key}`, label: tagNode?.label ?? key };
+    });
+    return { kind: "word", node, tags };
+  }
+  const words = node.neighbors
+    .map((id) => byId.get(id))
+    .filter((n): n is GraphNode => !!n && n.type === "word")
+    .map((n) => ({ id: n.id, label: n.label, lang: n.lang ?? "" }));
+  return { kind: "tag", node, words };
 }

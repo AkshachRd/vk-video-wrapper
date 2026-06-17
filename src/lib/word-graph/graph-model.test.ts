@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import type { SavedWord } from "@/lib/saved-words/types";
-import { buildGraph, computeHiddenIds, matchNodes, reconcileGraph, seedLayout } from "./graph-model";
+import {
+  buildGraph,
+  cardDataFor,
+  computeHiddenIds,
+  matchNodes,
+  nodeAt,
+  reconcileGraph,
+  seedLayout,
+  tagOptionsFromNodes,
+  toScreenX,
+  toWorldX,
+} from "./graph-model";
+import type { Camera } from "./types";
 
 function word(overrides: Partial<SavedWord> = {}): SavedWord {
   return {
@@ -174,5 +186,57 @@ describe("computeHiddenIds", () => {
     expect(hidden.has("word:a")).toBe(false);
     expect(hidden.has("tag:time")).toBe(true);
     expect(hidden.has("word:b")).toBe(true);
+  });
+});
+
+describe("transforms", () => {
+  const cam: Camera = { x: 50, y: -20, scale: 1.5 };
+  it("world→screen→world возвращает исходную координату", () => {
+    expect(toWorldX(toScreenX(12.5, cam), cam)).toBeCloseTo(12.5, 6);
+  });
+});
+
+describe("nodeAt", () => {
+  it("находит узел под экранной точкой и пропускает скрытые", () => {
+    const data = buildGraph([word({ id: "a", tags: [] })]);
+    const cam: Camera = { x: 0, y: 0, scale: 1 };
+    const n = data.nodes[0];
+    n.x = 0;
+    n.y = 0; // экранная точка (0,0)
+    expect(nodeAt(data.nodes, 0, 0, cam)?.id).toBe(n.id);
+    expect(nodeAt(data.nodes, 999, 999, cam)).toBeNull();
+    n.hidden = true;
+    expect(nodeAt(data.nodes, 0, 0, cam)).toBeNull();
+  });
+});
+
+describe("tagOptionsFromNodes", () => {
+  it("даёт ключ/ярлык/счётчик из тег-узлов, сортируя по ключу", () => {
+    const data = buildGraph([
+      word({ id: "a", tags: ["time", "aufgabe"] }),
+      word({ id: "b", tags: ["aufgabe"] }),
+    ]);
+    expect(tagOptionsFromNodes(data.nodes)).toEqual([
+      { key: "aufgabe", display: "aufgabe", count: 2 },
+      { key: "time", display: "time", count: 1 },
+    ]);
+  });
+});
+
+describe("cardDataFor", () => {
+  const data = buildGraph([
+    word({ id: "nein", displayWord: "nein", language: "de", tags: ["negation"] }),
+  ]);
+  it("для слова перечисляет его теги", () => {
+    const node = data.nodes.find((n) => n.id === "word:nein")!;
+    const card = cardDataFor(node, data.nodes);
+    expect(card.kind).toBe("word");
+    if (card.kind === "word") expect(card.tags).toEqual([{ id: "tag:negation", label: "negation" }]);
+  });
+  it("для тега перечисляет несущие слова с языком", () => {
+    const node = data.nodes.find((n) => n.id === "tag:negation")!;
+    const card = cardDataFor(node, data.nodes);
+    expect(card.kind).toBe("tag");
+    if (card.kind === "tag") expect(card.words).toEqual([{ id: "word:nein", label: "nein", lang: "DE" }]);
   });
 });
